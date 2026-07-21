@@ -1,7 +1,11 @@
 {
-  "name": "trash2cash-recicla-flow",
+  "name": "trash2cash-egov-hackathon",
   "version": "1.0.0",
   "private": true,
+  "engines": {
+    "node": "20.x"
+  },
+  "packageManager": "npm@10.9.2",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -10,8 +14,8 @@
     "test:egov-ai": "node scripts/test-egov-ai.mjs"
   },
   "dependencies": {
-    "@tensorflow-models/mobilenet": "^2.1.1",
-    "@tensorflow/tfjs": "^4.22.0",
+    "@tensorflow-models/mobilenet": "2.1.1",
+    "@tensorflow/tfjs": "4.22.0",
     "next": "16.2.10",
     "qrcode.react": "4.2.0",
     "react": "19.2.7",
