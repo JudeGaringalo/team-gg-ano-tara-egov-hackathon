@@ -1,0 +1,80 @@
+import { createHmac } from "node:crypto";
+import { normalizeBaseUrl, providerMessage, readProviderJson, withTimeout } from "./provider-http";
+
+export type EGovPayTransaction = {
+  uuid?: string;
+  url?: string;
+  channel?: { refno?: string; [key: string]: unknown };
+  [key: string]: unknown;
+};
+
+type TransactionResponse = { data?: EGovPayTransaction; message?: string; error?: string };
+
+function config() {
+  const baseUrl = normalizeBaseUrl(process.env.EGOV_PAY_BASE_URL, "https://egovpay-pgi-dev.oueg.info");
+  const apiKey = process.env.EGOV_PAY_API_KEY;
+  const settlementTemplateUuid = process.env.EGOV_PAY_SETTLEMENT_TEMPLATE_UUID;
+  if (!apiKey || !settlementTemplateUuid) throw new Error("eGovPay credentials are missing.");
+  return { baseUrl, apiKey, settlementTemplateUuid };
+}
+
+export async function createEGovPayCollection(input: {
+  amount: number;
+  txnid: string;
+  redirectUrl: string;
+  callbackUrl: string;
+  mobile?: string;
+  email?: string;
+  name?: string;
+  description?: Record<string, unknown>;
+}): Promise<EGovPayTransaction> {
+  const { baseUrl, apiKey, settlementTemplateUuid } = config();
+  const amount = Number(input.amount.toFixed(2));
+  const digest = createHmac("sha256", apiKey).update(`${amount}|${input.txnid}`).digest("hex");
+  const expires = new Date(Date.now() + 30 * 60 * 1000).toISOString().slice(0, 19).replace("T", " ");
+
+  const body = {
+    amount,
+    settlement_template_uuid: settlementTemplateUuid,
+    currency: "PHP",
+    digest,
+    mobile: input.mobile,
+    email: input.email,
+    name: input.name,
+    expires_at: expires,
+    link_expires_at: expires,
+    callback_url: input.callbackUrl,
+    redirect_url: input.redirectUrl,
+    txnid: input.txnid,
+    description: input.description || { purpose: "Trash2Cash transaction" },
+    items: [{ name: "Trash2Cash transaction", amount }],
+  };
+
+  const response = await fetch(`${baseUrl}/api/v1/transaction`, {
+    method: "POST",
+    headers: { "X-eGovPay-Token": apiKey, "Content-Type": "application/json; charset=utf-8" },
+    body: JSON.stringify(body),
+    cache: "no-store",
+    signal: withTimeout(),
+  });
+  const payload = await readProviderJson<TransactionResponse>(response, "eGovPay");
+  if (!response.ok || !payload.data) {
+    throw new Error(providerMessage(payload, `eGovPay could not create the transaction (${response.status}).`));
+  }
+  return payload.data;
+}
+
+export async function getEGovPayTransaction(uuid: string): Promise<EGovPayTransaction> {
+  const { baseUrl, apiKey } = config();
+  const response = await fetch(`${baseUrl}/api/v1/transaction/${encodeURIComponent(uuid)}`, {
+    method: "GET",
+    headers: { "X-eGovPay-Token": apiKey, "Content-Type": "application/json; charset=utf-8" },
+    cache: "no-store",
+    signal: withTimeout(),
+  });
+  const payload = await readProviderJson<TransactionResponse>(response, "eGovPay");
+  if (!response.ok || !payload.data) {
+    throw new Error(providerMessage(payload, `eGovPay could not retrieve the transaction (${response.status}).`));
+  }
+  return payload.data;
+}

@@ -3,6 +3,7 @@
 import {
   type ChangeEvent,
   type ReactNode,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -24,6 +25,56 @@ type Step =
 
 type RewardType = "cash" | "points";
 type Wallet = "GCash" | "Maya" | "Bank Account";
+
+type MaterialResult = {
+  name: string;
+  quantity: number;
+  estimatedWeight: number;
+  cashRate: number;
+  pointRate: number;
+  confidence: number;
+  rawLabel: string;
+};
+
+type CitizenProfile = {
+  uniqid?: string;
+  email?: string;
+  birth_date?: string;
+  first_name?: string;
+  middle_name?: string;
+  last_name?: string;
+  suffix?: string | null;
+  gender?: string;
+  mobile?: string;
+  mobile_number?: string;
+  photo?: string;
+  address?: string;
+  barangay_code?: string;
+  province_code?: string;
+  municipality_code?: string;
+  region_code?: string;
+  [key: string]: unknown;
+};
+
+type EVerifySdkResult = {
+  session_id?: string;
+  photo?: string;
+  photo_url?: string;
+  error?: string;
+};
+
+type EVerifySdk = {
+  start: (options: { pubKey: string }) => Promise<EVerifySdkResult>;
+};
+
+declare global {
+  interface Window {
+    eKYC?: () => EVerifySdk;
+    BarcodeDetector?: new (options?: { formats?: string[] }) => {
+      detect: (source: ImageBitmapSource) => Promise<Array<{ rawValue?: string }>>;
+    };
+  }
+}
 type IconName =
   | "arrow"
   | "back"
@@ -53,13 +104,69 @@ type Center = {
   accepts: string;
 };
 
-const MATERIAL = {
+const DEFAULT_MATERIAL: MaterialResult = {
   name: "PET Plastic Bottles",
   quantity: 12,
   estimatedWeight: 1.5,
   cashRate: 30,
   pointRate: 100,
+  confidence: 96,
+  rawLabel: "plastic bottle",
 };
+
+type ImagePrediction = {
+  className: string;
+  probability: number;
+};
+
+function mapImagePrediction(predictions: ImagePrediction[]): MaterialResult {
+  const best = predictions[0];
+  const label = (best?.className || "mixed recyclables").toLowerCase();
+  const confidence = Math.max(55, Math.round((best?.probability || 0.55) * 100));
+
+  if (/(water bottle|pop bottle|plastic bottle|soda bottle)/.test(label)) {
+    return { ...DEFAULT_MATERIAL, confidence, rawLabel: label };
+  }
+
+  if (/(beer bottle|wine bottle|glass)/.test(label)) {
+    return { name: "Glass Bottles", quantity: 4, estimatedWeight: 1.8, cashRate: 4, pointRate: 30, confidence, rawLabel: label };
+  }
+
+  if (/(can|tin|aluminum)/.test(label)) {
+    return { name: "Aluminum or Metal Cans", quantity: 6, estimatedWeight: 0.5, cashRate: 55, pointRate: 140, confidence, rawLabel: label };
+  }
+
+  if (/(carton|cardboard|box)/.test(label)) {
+    return { name: "Cardboard", quantity: 3, estimatedWeight: 2, cashRate: 12, pointRate: 45, confidence, rawLabel: label };
+  }
+
+  if (/(paper|newspaper|notebook)/.test(label)) {
+    return { name: "Paper", quantity: 20, estimatedWeight: 1.2, cashRate: 8, pointRate: 35, confidence, rawLabel: label };
+  }
+
+  if (/(laptop|computer|monitor|cellular telephone|mobile phone|keyboard)/.test(label)) {
+    return { name: "Small Electronic Waste", quantity: 1, estimatedWeight: 0.8, cashRate: 20, pointRate: 90, confidence, rawLabel: label };
+  }
+
+  return { name: "Mixed Recyclable Materials", quantity: 1, estimatedWeight: 1, cashRate: 15, pointRate: 60, confidence, rawLabel: label };
+}
+
+async function loadImageElement(src: string): Promise<HTMLImageElement> {
+  const image = new window.Image();
+  image.src = src;
+
+  if (typeof image.decode === "function") {
+    await image.decode();
+    return image;
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    image.onload = () => resolve();
+    image.onerror = () => reject(new Error("The selected image could not be loaded."));
+  });
+
+  return image;
+}
 
 const CENTERS: Center[] = [
   {
@@ -143,86 +250,196 @@ function wait(ms: number) {
 
 export default function Trash2CashApp() {
   const [step, setStep] = useState<Step>("login");
-  const [email, setEmail] = useState("lesterjudeag@gmail.com");
-  const [password, setPassword] = useState("trash2cash");
-  const [showPassword, setShowPassword] = useState(false);
+  const [citizen, setCitizen] = useState<CitizenProfile | null>(null);
+  const [exchangeCode, setExchangeCode] = useState("");
   const [loginBusy, setLoginBusy] = useState(false);
-  const [verificationStage, setVerificationStage] = useState<"idle" | "id" | "face" | "done">("idle");
+  const [loginError, setLoginError] = useState("");
   const [photo, setPhoto] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
+  const [material, setMaterial] = useState<MaterialResult>(DEFAULT_MATERIAL);
+  const [aiGuidance, setAiGuidance] = useState("");
   const [selectedCenter, setSelectedCenter] = useState(CENTERS[0].id);
-  const [actualWeight, setActualWeight] = useState(1.5);
+  const [actualWeight, setActualWeight] = useState(DEFAULT_MATERIAL.estimatedWeight);
   const [rewardType, setRewardType] = useState<RewardType>("cash");
   const [wallet, setWallet] = useState<Wallet>("GCash");
   const [account, setAccount] = useState("0917 123 4567");
   const [toast, setToast] = useState<string | null>(null);
+  const [reportOpen, setReportOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const selectedCenterData = CENTERS.find((center) => center.id === selectedCenter) ?? CENTERS[0];
-  const finalCash = actualWeight * MATERIAL.cashRate;
-  const finalPoints = Math.round(actualWeight * MATERIAL.pointRate);
+  const finalCash = actualWeight * material.cashRate;
+  const finalPoints = Math.round(actualWeight * material.pointRate);
   const transactionId = "T2C-A7F392";
   const qrPayload = JSON.stringify({ transactionId, wallet, amount: finalCash.toFixed(2), currency: "PHP" });
 
   const normalizedStep = step === "paymentQr" || step === "points" ? "wallet" : step;
   const activeIndex = useMemo(() => FLOW_STEPS.findIndex((item) => item.key === normalizedStep), [normalizedStep]);
 
+  useEffect(() => {
+    const stored = window.sessionStorage.getItem("trash2cash-citizen");
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored) as CitizenProfile;
+        setCitizen(parsed);
+        setStep("verify");
+      } catch {
+        window.sessionStorage.removeItem("trash2cash-citizen");
+      }
+    }
+
+    const url = new URL(window.location.href);
+    const code = url.searchParams.get("exchange_code");
+    if (code) {
+      setExchangeCode(code);
+      void submitSsoCode(code, true);
+      url.searchParams.delete("exchange_code");
+      window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    }
+    // submitSsoCode is deliberately run only for the initial callback URL.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function notify(message: string) {
     setToast(message);
     window.setTimeout(() => setToast(null), 2800);
   }
 
-  async function submitLogin() {
-    if (!email.trim() || !password.trim()) return;
+  async function submitSsoCode(code = exchangeCode, fromCallback = false) {
+    if (!code.trim()) {
+      setLoginError("Open Trash2Cash from eGovPH or paste the exchange code provided by the eGovPH callback.");
+      return;
+    }
+
     setLoginBusy(true);
-    await wait(700);
-    setLoginBusy(false);
-    setStep("verify");
-    notify("Secure citizen session started");
+    setLoginError("");
+    try {
+      const response = await fetch("/api/sso/callback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ exchangeCode: code.trim() }),
+      });
+      const payload = (await response.json()) as { profile?: CitizenProfile; error?: string };
+      if (!response.ok || !payload.profile) throw new Error(payload.error || "Unable to complete eGovPH sign-in.");
+
+      setCitizen(payload.profile);
+      window.sessionStorage.setItem("trash2cash-citizen", JSON.stringify(payload.profile));
+      setStep("verify");
+      notify("eGovPH citizen session connected");
+    } catch (error) {
+      setLoginError(error instanceof Error ? error.message : "Unable to complete eGovPH sign-in.");
+      if (fromCallback) setStep("login");
+    } finally {
+      setLoginBusy(false);
+    }
   }
 
-  async function verifyIdentity() {
-    setVerificationStage("id");
-    await wait(700);
-    setVerificationStage("face");
-    await wait(850);
-    setVerificationStage("done");
-    notify("Identity verified successfully");
-    await wait(350);
-    setStep("capture");
+  async function useEventIdentity() {
+    setLoginBusy(true);
+    setLoginError("");
+    await wait(450);
+    const profile: CitizenProfile = {
+      uniqid: "HACKATHON-CITIZEN-001",
+      first_name: "Lester",
+      last_name: "Garingalo",
+      email: "lesterjudeag@gmail.com",
+      mobile: "+639171234567",
+      birth_date: "1995-12-02",
+      gender: "Male",
+      region_code: "130000000",
+      province_code: "138000000",
+      municipality_code: "138130000",
+      barangay_code: "138130012",
+    };
+    setCitizen(profile);
+    window.sessionStorage.setItem("trash2cash-citizen", JSON.stringify(profile));
+    setLoginBusy(false);
+    setStep("verify");
+    notify("Event citizen session started");
   }
 
   function handlePhoto(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
+    if (photo && photo !== "sample") URL.revokeObjectURL(photo);
     setPhoto(URL.createObjectURL(file));
+    setMaterial(DEFAULT_MATERIAL);
+    setAiGuidance("");
   }
 
   function useSamplePhoto() {
     setPhoto("sample");
+    setMaterial(DEFAULT_MATERIAL);
+    setActualWeight(DEFAULT_MATERIAL.estimatedWeight);
+    setAiGuidance("");
     notify("Recyclable materials added");
   }
 
   async function analyzePhoto() {
+    if (!photo) return;
+
     setAnalyzing(true);
-    await wait(1050);
-    setAnalyzing(false);
-    setStep("estimate");
-    notify("Material analysis completed");
+    try {
+      let result = DEFAULT_MATERIAL;
+      if (photo !== "sample") {
+        const tf = await import("@tensorflow/tfjs");
+        const mobilenet = await import("@tensorflow-models/mobilenet");
+        await tf.ready();
+        const model = await mobilenet.load({ version: 2, alpha: 0.5 });
+        const image = await loadImageElement(photo);
+        const predictions = (await model.classify(image, 3)) as ImagePrediction[];
+        result = mapImagePrediction(predictions);
+      }
+
+      setMaterial(result);
+      setActualWeight(result.estimatedWeight);
+
+      try {
+        const response = await fetch("/api/egov-ai/assistant", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ material: result.name }),
+        });
+        const payload = (await response.json()) as { answer?: string; error?: string };
+        if (!response.ok) throw new Error(payload.error || "eGov AI guidance is temporarily unavailable.");
+        setAiGuidance(payload.answer || "Prepare the materials clean, dry, and separated before drop-off.");
+      } catch (error) {
+        console.error(error);
+        setAiGuidance("Keep the materials clean, dry, and separated. The accredited collection center will confirm the accepted type, final weight, and reward.");
+      }
+
+      setStep("estimate");
+      notify("Material analysis completed");
+    } catch (error) {
+      console.error("Image recognition failed:", error);
+      setMaterial(DEFAULT_MATERIAL);
+      setActualWeight(DEFAULT_MATERIAL.estimatedWeight);
+      setAiGuidance("Keep the materials clean, dry, and separated. The accredited collection center will confirm the accepted type, final weight, and reward.");
+      setStep("estimate");
+      notify("Material added for manual confirmation");
+    } finally {
+      setAnalyzing(false);
+    }
   }
 
   function logout() {
+    window.sessionStorage.removeItem("trash2cash-citizen");
+    setCitizen(null);
+    setExchangeCode("");
     setStep("login");
-    setVerificationStage("idle");
     setPhoto(null);
-    setActualWeight(1.5);
+    setActualWeight(DEFAULT_MATERIAL.estimatedWeight);
     setRewardType("cash");
     setWallet("GCash");
+    setMaterial(DEFAULT_MATERIAL);
+    setAiGuidance("");
   }
 
   function restart() {
     setPhoto(null);
-    setActualWeight(1.5);
+    setActualWeight(DEFAULT_MATERIAL.estimatedWeight);
+    setMaterial(DEFAULT_MATERIAL);
+    setAiGuidance("");
     setRewardType("cash");
     setWallet("GCash");
     setStep("capture");
@@ -244,6 +461,9 @@ export default function Trash2CashApp() {
     setStep(previous[step] ?? "login");
   }
 
+  const displayName = [citizen?.first_name, citizen?.last_name].filter(Boolean).join(" ") || "Citizen";
+  const initials = displayName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+
   if (step === "login") {
     return (
       <div className="login-page">
@@ -261,39 +481,38 @@ export default function Trash2CashApp() {
             </div>
             <div className="story-visual" aria-hidden="true">
               <div className="metal-ring"><Icon name="recycle" size={112} /></div>
-              <span className="orbit-label label-one">AI estimate</span>
+              <span className="orbit-label label-one">AI assessment</span>
               <span className="orbit-label label-two">Verified drop-off</span>
               <span className="orbit-label label-three">Secure reward</span>
             </div>
             <div className="story-footer">
-              <span>National ID e-Verify</span>
-              <span>Face Liveness</span>
-              <span>eGov AI</span>
-              <span>eGov Pay</span>
+              <span>eGov SSO</span><span>National ID e-Verify</span><span>Face Liveness</span><span>eGov AI</span>
             </div>
           </section>
 
           <section className="login-panel-wrap">
             <div className="login-panel">
-              <span className="panel-number">01 / Citizen access</span>
-              <h2>Welcome to Trash2Cash</h2>
-              <p>Sign in to begin a verified recycling transaction.</p>
+              <span className="panel-number">01 / eGovPH citizen access</span>
+              <h2>Sign in to Trash2Cash</h2>
+              <p>When opened from eGovPH, the citizen exchange code is processed automatically. During venue testing, it can also be pasted below.</p>
 
               <label className="field">
-                <span>Email address</span>
-                <div className="field-control"><Icon name="user" size={19} /><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@email.com" /></div>
+                <span>eGovPH exchange code</span>
+                <div className="field-control"><Icon name="lock" size={19} /><input value={exchangeCode} onChange={(event) => setExchangeCode(event.target.value)} placeholder="Paste exchange_code" autoComplete="off" /></div>
               </label>
 
-              <label className="field">
-                <span>Password</span>
-                <div className="field-control"><Icon name="lock" size={19} /><input type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Enter your password" /><button type="button" className="show-password" onClick={() => setShowPassword((current) => !current)} aria-label="Show password"><Icon name="eye" size={18} /></button></div>
-              </label>
+              {loginError && <div className="provider-error" role="alert">{loginError}</div>}
 
-              <button className="primary-action login-action" disabled={!email.trim() || !password.trim() || loginBusy} onClick={submitLogin}>
-                <span>{loginBusy ? "Signing in…" : "Continue securely"}</span><Icon name="arrow" />
+              <button className="primary-action login-action" disabled={!exchangeCode.trim() || loginBusy} onClick={() => void submitSsoCode()}>
+                <span>{loginBusy ? "Connecting to eGovPH…" : "Continue with eGovPH"}</span><Icon name="arrow" />
               </button>
 
-              <div className="login-note"><Icon name="lock" size={16} /><p>Your identity will be confirmed using National ID e-Verify and Face Liveness before a transaction can begin.</p></div>
+              <div className="login-divider"><span>Venue testing</span></div>
+              <button className="secondary-action full-action" disabled={loginBusy} onClick={() => void useEventIdentity()}>
+                Use event test identity
+              </button>
+
+              <div className="login-note"><Icon name="lock" size={16} /><p>Partner credentials remain on the Next.js server. The browser receives only the citizen profile needed for this session.</p></div>
             </div>
           </section>
         </main>
@@ -306,7 +525,10 @@ export default function Trash2CashApp() {
       <header className="app-header">
         <Brand dark />
         <div className="header-center">Recycling transaction <strong>{transactionId}</strong></div>
-        <button className="account-button" onClick={logout}><span>LG</span><div><strong>Lester</strong><small>Verified citizen</small></div><Icon name="logout" size={18} /></button>
+        <div className="header-actions">
+          <button className="report-button" onClick={() => setReportOpen(true)}>Report issue</button>
+          <button className="account-button" onClick={logout}><span>{initials}</span><div><strong>{displayName}</strong><small>{step === "verify" ? "Citizen session" : "Verified citizen"}</small></div><Icon name="logout" size={18} /></button>
+        </div>
       </header>
 
       <ProgressBar activeIndex={activeIndex} />
@@ -317,23 +539,23 @@ export default function Trash2CashApp() {
           <span>{Math.max(activeIndex + 1, 1).toString().padStart(2, "0")} / 08</span>
         </div>
 
-        {step === "verify" && <VerifyScreen stage={verificationStage} onVerify={verifyIdentity} />}
+        {step === "verify" && <VerifyScreen citizen={citizen} onVerified={(verified) => { setCitizen((current) => ({ ...(current || {}), ...verified })); setStep("capture"); notify("National ID and Face Liveness verified"); }} />}
         {step === "capture" && <CaptureScreen photo={photo} inputRef={inputRef} onPhoto={handlePhoto} onSample={useSamplePhoto} analyzing={analyzing} onAnalyze={analyzePhoto} />}
-        {step === "estimate" && <EstimateScreen onContinue={() => setStep("center")} />}
-        {step === "center" && <CenterScreen selected={selectedCenter} onSelect={setSelectedCenter} onContinue={() => setStep("validation")} />}
-        {step === "validation" && <ValidationScreen center={selectedCenterData} weight={actualWeight} setWeight={setActualWeight} cash={finalCash} points={finalPoints} onContinue={() => setStep("reward")} />}
+        {step === "estimate" && <EstimateScreen material={material} guidance={aiGuidance} onContinue={() => setStep("center")} />}
+        {step === "center" && <CenterScreen material={material} selected={selectedCenter} onSelect={setSelectedCenter} onContinue={() => setStep("validation")} />}
+        {step === "validation" && <ValidationScreen material={material} center={selectedCenterData} weight={actualWeight} setWeight={setActualWeight} cash={finalCash} points={finalPoints} onContinue={() => setStep("reward")} />}
         {step === "reward" && <RewardScreen type={rewardType} setType={setRewardType} cash={finalCash} points={finalPoints} onContinue={() => setStep(rewardType === "cash" ? "wallet" : "points")} />}
         {step === "wallet" && <WalletScreen wallet={wallet} setWallet={setWallet} account={account} setAccount={setAccount} cash={finalCash} onContinue={() => setStep("paymentQr")} />}
-        {step === "paymentQr" && <PaymentQrScreen wallet={wallet} cash={finalCash} transactionId={transactionId} payload={qrPayload} onContinue={() => setStep("complete")} />}
+        {step === "paymentQr" && <PaymentQrScreen material={material} wallet={wallet} cash={finalCash} transactionId={transactionId} payload={qrPayload} onContinue={() => setStep("complete")} />}
         {step === "points" && <PointsScreen points={finalPoints} onContinue={() => setStep("complete")} />}
-        {step === "complete" && <CompleteScreen rewardType={rewardType} wallet={wallet} cash={finalCash} points={finalPoints} weight={actualWeight} center={selectedCenterData} transactionId={transactionId} onRestart={restart} />}
+        {step === "complete" && <CompleteScreen citizen={citizen} material={material} rewardType={rewardType} wallet={wallet} cash={finalCash} points={finalPoints} weight={actualWeight} center={selectedCenterData} transactionId={transactionId} onRestart={restart} />}
       </main>
 
+      {reportOpen && <ReportModal citizen={citizen} transactionId={transactionId} onClose={() => setReportOpen(false)} />}
       {toast && <div className="toast"><span><Icon name="check" size={16} /></span>{toast}</div>}
     </div>
   );
 }
-
 function Brand({ dark = false }: { dark?: boolean }) {
   return (
     <div className={dark ? "brand dark" : "brand"}>
@@ -372,35 +594,246 @@ function Screen({ eyebrow, title, description, aside, children }: { eyebrow: str
   );
 }
 
-function VerifyScreen({ stage, onVerify }: { stage: "idle" | "id" | "face" | "done"; onVerify: () => void }) {
-  const idDone = stage === "face" || stage === "done";
-  const faceDone = stage === "done";
+function VerifyScreen({ citizen, onVerified }: { citizen: CitizenProfile | null; onVerified: (profile: CitizenProfile) => void }) {
+  const [mode, setMode] = useState<"qr" | "personal">("qr");
+  const [qrValue, setQrValue] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<"idle" | "qr" | "face" | "done">("idle");
+  const [error, setError] = useState("");
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [firstName, setFirstName] = useState(citizen?.first_name || "");
+  const [middleName, setMiddleName] = useState(citizen?.middle_name || "");
+  const [lastName, setLastName] = useState(citizen?.last_name || "");
+  const [birthDate, setBirthDate] = useState(citizen?.birth_date || "");
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const scanningRef = useRef(false);
+
+  useEffect(() => () => stopCamera(), []);
+
+  function stopCamera() {
+    scanningRef.current = false;
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    setCameraOpen(false);
+  }
+
+  async function startQrCamera() {
+    setError("");
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError("Camera access is not supported in this browser. Paste the QR value instead.");
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
+      streamRef.current = stream;
+      setCameraOpen(true);
+      await wait(80);
+      if (!videoRef.current) return;
+      videoRef.current.srcObject = stream;
+      await videoRef.current.play();
+
+      if (!window.BarcodeDetector) {
+        setError("Live QR detection is not available in this browser. You may still photograph the QR and paste its encoded value.");
+        return;
+      }
+
+      const detector = new window.BarcodeDetector({ formats: ["qr_code"] });
+      scanningRef.current = true;
+      const scan = async () => {
+        if (!scanningRef.current || !videoRef.current) return;
+        try {
+          const codes = await detector.detect(videoRef.current);
+          const found = codes.find((item) => item.rawValue)?.rawValue;
+          if (found) {
+            setQrValue(found);
+            stopCamera();
+            return;
+          }
+        } catch {
+          // Keep scanning while the camera is warming up.
+        }
+        window.setTimeout(scan, 350);
+      };
+      void scan();
+    } catch (cameraError) {
+      console.error(cameraError);
+      stopCamera();
+      setError("Camera permission was not granted. Paste the National ID QR value or use profile verification.");
+    }
+  }
+
+  async function runFaceLiveness(): Promise<string> {
+    setStatus("face");
+    const configResponse = await fetch("/api/everify/config", { cache: "no-store" });
+    const config = (await configResponse.json()) as { publicKey?: string; sdkUrl?: string; error?: string };
+    if (!configResponse.ok || !config.publicKey || !config.sdkUrl) throw new Error(config.error || "Face Liveness configuration is unavailable.");
+    const publicKey = config.publicKey;
+    const sdkUrl = config.sdkUrl;
+
+    if (!window.eKYC) {
+      await new Promise<void>((resolve, reject) => {
+        const existing = document.querySelector<HTMLScriptElement>(`script[src="${sdkUrl}"]`);
+        if (existing) {
+          if (window.eKYC) resolve();
+          else {
+            existing.addEventListener("load", () => resolve(), { once: true });
+            existing.addEventListener("error", () => reject(new Error("Unable to load the Face Liveness SDK.")), { once: true });
+          }
+          return;
+        }
+        const script = document.createElement("script");
+        script.src = sdkUrl;
+        script.async = true;
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error("Unable to load the Face Liveness SDK."));
+        document.head.appendChild(script);
+      });
+    }
+
+    if (!window.eKYC) throw new Error("Face Liveness did not initialize in this browser.");
+    const result = await window.eKYC().start({ pubKey: publicKey });
+    if (!result.session_id) throw new Error(result.error || "Face Liveness did not return a valid session.");
+    return result.session_id;
+  }
+
+  async function verifyWithQr() {
+    if (!qrValue.trim()) {
+      setError("Scan or paste the National ID QR value first.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setStatus("qr");
+    try {
+      const checkResponse = await fetch("/api/everify/qr-check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ value: qrValue.trim() }),
+      });
+      const checked = (await checkResponse.json()) as { profile?: CitizenProfile; error?: string };
+      if (!checkResponse.ok) throw new Error(checked.error || "The National ID QR could not be checked.");
+
+      const sessionId = await runFaceLiveness();
+      const verifyResponse = await fetch("/api/everify/qr-verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ value: qrValue.trim(), faceLivenessSessionId: sessionId }),
+      });
+      const verified = (await verifyResponse.json()) as { profile?: CitizenProfile; error?: string };
+      if (!verifyResponse.ok || !verified.profile) throw new Error(verified.error || "National ID verification was not completed.");
+      setStatus("done");
+      await wait(300);
+      onVerified({ ...(checked.profile || {}), ...verified.profile });
+    } catch (verifyError) {
+      setStatus("idle");
+      setError(verifyError instanceof Error ? verifyError.message : "National ID verification failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function verifyWithProfile() {
+    if (!firstName.trim() || !lastName.trim() || !birthDate) {
+      setError("First name, last name, and birth date are required.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setStatus("qr");
+    try {
+      const sessionId = await runFaceLiveness();
+      const response = await fetch("/api/everify/personal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ firstName, middleName, lastName, birthDate, faceLivenessSessionId: sessionId }),
+      });
+      const payload = (await response.json()) as { profile?: CitizenProfile; error?: string };
+      if (!response.ok || !payload.profile) throw new Error(payload.error || "The citizen profile could not be verified.");
+      setStatus("done");
+      await wait(300);
+      onVerified(payload.profile);
+    } catch (verifyError) {
+      setStatus("idle");
+      setError(verifyError instanceof Error ? verifyError.message : "Citizen verification failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function useEventVerification() {
+    setBusy(true);
+    setError("");
+    setStatus("qr");
+    await wait(450);
+    setStatus("face");
+    await wait(550);
+    setStatus("done");
+    await wait(250);
+    setBusy(false);
+    onVerified({
+      ...(citizen || {}),
+      first_name: citizen?.first_name || "Lester",
+      last_name: citizen?.last_name || "Garingalo",
+      birth_date: citizen?.birth_date || "1995-12-02",
+      gender: citizen?.gender || "Male",
+      mobile_number: citizen?.mobile_number || citizen?.mobile || "+639171234567",
+      code: "EVENT-VERIFIED",
+    });
+  }
+
   return (
     <Screen
-      eyebrow="Secure citizen verification"
-      title="Confirm that it’s really you."
-      description="Trash2Cash uses your verified citizen identity to prevent duplicate accounts, fraudulent reward claims, and transaction disputes."
-      aside={<InfoAside icon="lock" title="Why verification matters" text="Only verified citizens can submit and receive recycling rewards. Your identity is used only for the transaction record." tags={["National ID e-Verify", "Face Liveness"]} />}
+      eyebrow="National ID verification"
+      title="Confirm that the citizen and the person present match."
+      description="Scan the National ID QR, then complete Face Liveness. Personal-information verification is available when the QR cannot be scanned."
+      aside={<InfoAside icon="id" title="One citizen, one reward" text="National ID e-Verify and Face Liveness help prevent duplicate accounts, impersonation, and repeated reward claims." tags={["e-Verify", "Face Liveness", "Encrypted session"]} />}
     >
-      <div className="verification-list">
-        <VerificationCard icon="id" number="01" title="National ID e-Verify" text="Authenticate your citizen identity using your National ID record." state={stage === "id" ? "loading" : idDone ? "done" : "idle"} />
-        <VerificationCard icon="eye" number="02" title="Face Liveness" text="Confirm that you are physically present and prevent spoofed submissions." state={stage === "face" ? "loading" : faceDone ? "done" : "idle"} />
+      <div className="verification-status-grid">
+        <VerificationCard icon="id" number="01" title="National ID e-Verify" text="Validate the QR or citizen information against the National ID service." state={status === "qr" || status === "face" || status === "done" ? status === "qr" ? "loading" : "done" : "idle"} />
+        <VerificationCard icon="user" number="02" title="Face Liveness" text="Use the official camera session to confirm physical presence." state={status === "face" ? "loading" : status === "done" ? "done" : "idle"} />
       </div>
-      <div className="action-row"><button className="primary-action" onClick={onVerify} disabled={stage !== "idle" && stage !== "done"}><span>{stage === "idle" ? "Verify my identity" : stage === "done" ? "Identity verified" : "Verification in progress…"}</span><Icon name={stage === "done" ? "check" : "arrow"} /></button></div>
+
+      <div className="verification-tabs">
+        <button className={mode === "qr" ? "active" : ""} onClick={() => { setMode("qr"); setError(""); }}>Scan National ID QR</button>
+        <button className={mode === "personal" ? "active" : ""} onClick={() => { setMode("personal"); setError(""); stopCamera(); }}>Use citizen profile</button>
+      </div>
+
+      {mode === "qr" ? (
+        <div className="verify-method-card">
+          <div className="qr-camera-box">
+            {cameraOpen ? <video ref={videoRef} muted playsInline aria-label="National ID QR camera" /> : <div><Icon name="camera" size={34} /><strong>National ID QR camera</strong><span>Use the rear camera and hold the QR inside the frame.</span></div>}
+          </div>
+          <div className="verify-controls">
+            <button className="secondary-action" type="button" onClick={cameraOpen ? stopCamera : () => void startQrCamera()}>{cameraOpen ? "Stop camera" : "Open QR camera"}</button>
+            <label className="field light-field"><span>QR value</span><div className="field-control"><Icon name="id" size={19} /><textarea value={qrValue} onChange={(event) => setQrValue(event.target.value)} placeholder="Scanned value appears here, or paste it manually" rows={4} /></div></label>
+          </div>
+        </div>
+      ) : (
+        <div className="personal-form-grid">
+          <label className="field light-field"><span>First name</span><div className="field-control"><input value={firstName} onChange={(event) => setFirstName(event.target.value)} /></div></label>
+          <label className="field light-field"><span>Middle name</span><div className="field-control"><input value={middleName} onChange={(event) => setMiddleName(event.target.value)} /></div></label>
+          <label className="field light-field"><span>Last name</span><div className="field-control"><input value={lastName} onChange={(event) => setLastName(event.target.value)} /></div></label>
+          <label className="field light-field"><span>Birth date</span><div className="field-control"><input type="date" value={birthDate} onChange={(event) => setBirthDate(event.target.value)} /></div></label>
+        </div>
+      )}
+
+      {error && <div className="provider-error" role="alert">{error}</div>}
+
+      <div className="action-row stacked-actions">
+        <button className="primary-action" disabled={busy} onClick={() => void (mode === "qr" ? verifyWithQr() : verifyWithProfile())}>
+          <span>{busy ? status === "face" ? "Completing Face Liveness…" : "Checking National ID…" : "Verify citizen"}</span><Icon name="arrow" />
+        </button>
+        <button className="text-action" disabled={busy} onClick={() => void useEventVerification()}>Use event test verification</button>
+      </div>
     </Screen>
   );
 }
 
 function VerificationCard({ icon, number, title, text, state }: { icon: IconName; number: string; title: string; text: string; state: "idle" | "loading" | "done" }) {
-  return (
-    <div className={state === "loading" ? "verification-card loading" : state === "done" ? "verification-card complete" : "verification-card"}>
-      <span className="card-icon"><Icon name={icon} size={27} /></span>
-      <div><small>{number}</small><h3>{title}</h3><p>{text}</p></div>
-      <span className="verification-status">{state === "loading" ? "Checking…" : state === "done" ? <Icon name="check" size={17} /> : "Ready"}</span>
-    </div>
-  );
+  return <div className={`verification-card ${state}`}><span className="verification-icon"><Icon name={icon} size={25} /></span><small>{number}</small><h3>{title}</h3><p>{text}</p><div className="verification-state">{state === "loading" ? <><i className="spinner" />Checking…</> : state === "done" ? <><Icon name="check" size={16} />Verified</> : "Ready"}</div></div>;
 }
-
 function CaptureScreen({ photo, inputRef, onPhoto, onSample, analyzing, onAnalyze }: { photo: string | null; inputRef: React.RefObject<HTMLInputElement | null>; onPhoto: (event: ChangeEvent<HTMLInputElement>) => void; onSample: () => void; analyzing: boolean; onAnalyze: () => void }) {
   return (
     <Screen
@@ -424,7 +857,7 @@ function CaptureScreen({ photo, inputRef, onPhoto, onSample, analyzing, onAnalyz
           <div className="photo-meta"><span><Icon name="check" size={16} /> Materials ready for analysis</span><button onClick={() => inputRef.current?.click()}>Replace image</button></div>
         </div>
       )}
-      <div className="action-row"><button className="primary-action" disabled={!photo || analyzing} onClick={onAnalyze}><span>{analyzing ? "Analyzing materials…" : "Analyze with eGov AI"}</span><Icon name="sparkles" /></button></div>
+      <div className="action-row"><button className="primary-action" disabled={!photo || analyzing} onClick={onAnalyze}><span>{analyzing ? "Analyzing materials…" : "Analyze recyclable image"}</span><Icon name="sparkles" /></button></div>
     </Screen>
   );
 }
@@ -441,35 +874,36 @@ function BottleScene() {
   );
 }
 
-function EstimateScreen({ onContinue }: { onContinue: () => void }) {
+function EstimateScreen({ material, guidance, onContinue }: { material: MaterialResult; guidance: string; onContinue: () => void }) {
   return (
     <Screen
-      eyebrow="eGov AI estimate"
+      eyebrow="Image recognition and eGov AI guidance"
       title="Your recyclable estimate is ready."
-      description="This result helps you understand the likely material value before visiting a collection center. The physical measurement will determine the final reward."
-      aside={<TransactionAside center="Not selected yet" weight={`${MATERIAL.estimatedWeight.toFixed(1)} kg estimated`} reward={`${formatMoney(MATERIAL.estimatedWeight * MATERIAL.cashRate)} or ${MATERIAL.estimatedWeight * MATERIAL.pointRate} points`} />}
+      description="The image model suggests a material category, while eGov AI provides preparation guidance. The physical measurement determines the final reward."
+      aside={<TransactionAside material={material} center="Not selected yet" weight={`${material.estimatedWeight.toFixed(1)} kg estimated`} reward={`${formatMoney(material.estimatedWeight * material.cashRate)} or ${Math.round(material.estimatedWeight * material.pointRate)} points`} />}
     >
-      <div className="result-hero"><span><Icon name="recycle" size={31} /></span><div><small>Material identified</small><h3>{MATERIAL.name}</h3><b>96% recognition confidence</b></div></div>
+      <div className="result-hero"><span><Icon name="recycle" size={31} /></span><div><small>Material identified</small><h3>{material.name}</h3><b>{material.confidence}% recognition confidence</b></div></div>
       <div className="metrics-grid">
-        <Metric label="Estimated quantity" value={`${MATERIAL.quantity} pcs`} />
-        <Metric label="Estimated weight" value={`${MATERIAL.estimatedWeight.toFixed(1)} kg`} />
-        <Metric label="Potential cash" value={formatMoney(MATERIAL.estimatedWeight * MATERIAL.cashRate)} />
-        <Metric label="Potential points" value={`${MATERIAL.estimatedWeight * MATERIAL.pointRate}`} />
+        <Metric label="Estimated quantity" value={`${material.quantity} pcs`} />
+        <Metric label="Estimated weight" value={`${material.estimatedWeight.toFixed(1)} kg`} />
+        <Metric label="Potential cash" value={formatMoney(material.estimatedWeight * material.cashRate)} />
+        <Metric label="Potential points" value={`${Math.round(material.estimatedWeight * material.pointRate)}`} />
       </div>
+      <div className="ai-guidance"><span><Icon name="sparkles" size={22} /></span><div><small>eGov AI guidance</small><p>{guidance || "Keep materials clean, dry, and separated before drop-off."}</p></div></div>
       <div className="notice"><Icon name="scale" size={20} /><p>The estimate is not the final payout. An accredited collection-center attendant will inspect and weigh the actual materials.</p></div>
       <div className="action-row"><button className="primary-action" onClick={onContinue}><span>Choose a collection center</span><Icon name="arrow" /></button></div>
     </Screen>
   );
 }
 
-function CenterScreen({ selected, onSelect, onContinue }: { selected: string; onSelect: (id: string) => void; onContinue: () => void }) {
+function CenterScreen({ material, selected, onSelect, onContinue }: { material: MaterialResult; selected: string; onSelect: (id: string) => void; onContinue: () => void }) {
   const center = CENTERS.find((item) => item.id === selected) ?? CENTERS[0];
   return (
     <Screen
       eyebrow="Accredited drop-off"
       title="Choose where to bring your materials."
       description="Select an accredited Barangay MRF or partner junkshop. The attendant will inspect, weigh, and confirm the final reward."
-      aside={<TransactionAside center={center.name} weight={`${MATERIAL.estimatedWeight.toFixed(1)} kg estimated`} reward={`${formatMoney(MATERIAL.estimatedWeight * MATERIAL.cashRate)} estimated`} />}
+      aside={<TransactionAside material={material} center={center.name} weight={`${material.estimatedWeight.toFixed(1)} kg estimated`} reward={`${formatMoney(material.estimatedWeight * material.cashRate)} estimated`} />}
     >
       <div className="center-list">
         {CENTERS.map((item) => (
@@ -484,18 +918,18 @@ function CenterScreen({ selected, onSelect, onContinue }: { selected: string; on
   );
 }
 
-function ValidationScreen({ center, weight, setWeight, cash, points, onContinue }: { center: Center; weight: number; setWeight: (value: number) => void; cash: number; points: number; onContinue: () => void }) {
+function ValidationScreen({ material, center, weight, setWeight, cash, points, onContinue }: { material: MaterialResult; center: Center; weight: number; setWeight: (value: number) => void; cash: number; points: number; onContinue: () => void }) {
   return (
     <Screen
       eyebrow="Collection-center validation"
       title="Confirm the accepted weight."
       description="The collection-center attendant has inspected the materials. Enter the actual accepted weight to calculate the final reward."
-      aside={<TransactionAside center={center.name} weight={`${weight.toFixed(1)} kg validated`} reward={`${formatMoney(cash)} or ${points} points`} />}
+      aside={<TransactionAside material={material} center={center.name} weight={`${weight.toFixed(1)} kg validated`} reward={`${formatMoney(cash)} or ${points} points`} />}
     >
       <div className="validation-banner"><span><Icon name="location" size={25} /></span><div><small>Accredited facility</small><h3>{center.name}</h3><p>{center.address}</p></div><b><Icon name="check" size={15} /> Attendant verified</b></div>
       <div className="validation-grid">
         <label className="weight-card"><span>Actual accepted weight</span><div><input type="number" min="0.1" step="0.1" value={weight} onChange={(event) => setWeight(Number(event.target.value) || 0)} /><strong>kg</strong></div><small>Recorded after inspection and weighing</small></label>
-        <div className="accepted-card"><span><Icon name="check" size={24} /></span><div><small>Accepted material</small><h3>{MATERIAL.name}</h3><p>Clean and recyclable</p></div></div>
+        <div className="accepted-card"><span><Icon name="check" size={24} /></span><div><small>Accepted material</small><h3>{material.name}</h3><p>Clean and recyclable</p></div></div>
       </div>
       <div className="reward-preview"><div><small>Final cash reward</small><strong>{formatMoney(cash)}</strong></div><span>OR</span><div><small>Final Green Points</small><strong>{points} points</strong></div></div>
       <div className="action-row"><button className="primary-action" disabled={weight <= 0} onClick={onContinue}><span>Confirm validated transaction</span><Icon name="arrow" /></button></div>
@@ -528,28 +962,28 @@ function WalletScreen({ wallet, setWallet, account, setAccount, cash, onContinue
   ];
   return (
     <Screen
-      eyebrow="eGov Pay"
+      eyebrow="Reward channel"
       title="Select your payment channel."
-      description={`Choose where the approved ${formatMoney(cash)} reward should be sent. The payment partner will generate the claim QR.`}
-      aside={<InfoAside icon="wallet" title="Secure disbursement" text="eGov Pay sends the approved reward request to your selected payment partner. Trash2Cash does not store your wallet balance." tags={["GCash", "Maya", "Bank"]} />}
+      description={`Choose where the approved ${formatMoney(cash)} reward should be received. The partner payout flow will generate the claim reference.`}
+      aside={<InfoAside icon="wallet" title="Secure reward claim" text="Trash2Cash prepares the validated reward for the selected payment channel without storing the citizen’s wallet balance." tags={["GCash", "Maya", "Bank"]} />}
     >
       <div className="wallet-grid">
         {wallets.map((item) => <button key={item.name} className={wallet === item.name ? "wallet-card selected" : "wallet-card"} onClick={() => setWallet(item.name)}><span className={`wallet-mark ${item.mark.toLowerCase()}`}>{item.mark}</span><div><h3>{item.name}</h3><small>{item.helper}</small></div><span className="radio">{wallet === item.name && <i />}</span></button>)}
       </div>
       <label className="field light-field"><span>{wallet === "Bank Account" ? "Bank account reference" : `${wallet} mobile number`}</span><div className="field-control"><Icon name="wallet" size={19} /><input value={account} onChange={(event) => setAccount(event.target.value)} placeholder={wallet === "Bank Account" ? "Enter account reference" : "09XX XXX XXXX"} /></div></label>
-      <div className="process-line"><span>01</span><p>Trash2Cash submits the validated reward through eGov Pay.</p><span>02</span><p>{wallet} generates the payment or claim QR.</p></div>
+      <div className="process-line"><span>01</span><p>Trash2Cash confirms the validated reward and selected channel.</p><span>02</span><p>{wallet} generates the payment-partner claim reference.</p></div>
       <div className="action-row"><button className="primary-action" disabled={!account.trim()} onClick={onContinue}><span>Generate {wallet} claim QR</span><Icon name="arrow" /></button></div>
     </Screen>
   );
 }
 
-function PaymentQrScreen({ wallet, cash, transactionId, payload, onContinue }: { wallet: Wallet; cash: number; transactionId: string; payload: string; onContinue: () => void }) {
+function PaymentQrScreen({ material, wallet, cash, transactionId, payload, onContinue }: { material: MaterialResult; wallet: Wallet; cash: number; transactionId: string; payload: string; onContinue: () => void }) {
   return (
     <Screen
       eyebrow="Payment partner"
       title={`${wallet} claim QR is ready.`}
       description="Scan or present this payment-partner QR to complete the reward claim."
-      aside={<TransactionAside center="Validated drop-off" weight={`${MATERIAL.estimatedWeight.toFixed(1)} kg`} reward={`${formatMoney(cash)} via ${wallet}`} />}
+      aside={<TransactionAside material={material} center="Validated drop-off" weight={`${material.estimatedWeight.toFixed(1)} kg`} reward={`${formatMoney(cash)} via ${wallet}`} />}
     >
       <div className="qr-section">
         <div className="qr-card"><div className="qr-provider"><span className={`wallet-mark ${wallet === "GCash" ? "g" : wallet === "Maya" ? "m" : "b"}`}>{wallet.charAt(0)}</span><div><h3>{wallet}</h3><small>Payment partner</small></div></div><div className="qr-code"><QRCodeSVG value={payload} size={220} level="M" includeMargin /></div><div className="qr-value"><small>Reward amount</small><strong>{formatMoney(cash)}</strong><span>{transactionId}</span></div></div>
@@ -575,30 +1009,143 @@ function PointsScreen({ points, onContinue }: { points: number; onContinue: () =
   );
 }
 
-function CompleteScreen({ rewardType, wallet, cash, points, weight, center, transactionId, onRestart }: { rewardType: RewardType; wallet: Wallet; cash: number; points: number; weight: number; center: Center; transactionId: string; onRestart: () => void }) {
+function CompleteScreen({ citizen, material, rewardType, wallet, cash, points, weight, center, transactionId, onRestart }: { citizen: CitizenProfile | null; material: MaterialResult; rewardType: RewardType; wallet: Wallet; cash: number; points: number; weight: number; center: Center; transactionId: string; onRestart: () => void }) {
+  const [messageState, setMessageState] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [messageText, setMessageText] = useState("");
+  const mobile = normalizePhMobile(String(citizen?.mobile_number || citizen?.mobile || ""));
+
+  async function sendConfirmation() {
+    if (!mobile) {
+      setMessageState("error");
+      setMessageText("Add a valid Philippine mobile number to the citizen profile before sending an SMS.");
+      return;
+    }
+    setMessageState("sending");
+    setMessageText("");
+    try {
+      const reward = rewardType === "cash" ? `${formatMoney(cash)} via ${wallet}` : `${points} Green Points`;
+      const response = await fetch("/api/emessage/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ number: mobile, message: `Trash2Cash ${transactionId}: Your ${weight.toFixed(1)} kg recycling transaction at ${center.name} is complete. Reward: ${reward}.` }),
+      });
+      const payload = (await response.json()) as { message?: string; error?: string };
+      if (!response.ok) throw new Error(payload.error || "The confirmation SMS could not be sent.");
+      setMessageState("sent");
+      setMessageText(payload.message || "Confirmation SMS sent through e-Message.");
+    } catch (error) {
+      setMessageState("error");
+      setMessageText(error instanceof Error ? error.message : "The confirmation SMS could not be sent.");
+    }
+  }
+
   return (
     <Screen
       eyebrow="Transaction completed"
       title="Your recycling reward has been issued."
-      description="The materials were validated, the reward was completed, and a transaction confirmation was sent through e-Message."
+      description="The materials were validated and the reward flow was completed. Send the citizen a transaction confirmation through e-Message."
       aside={<InfoAside icon="check" title="Verified completion" text="This transaction is now recorded as completed and cannot be claimed again." tags={[transactionId, "Completed"]} />}
     >
       <div className="complete-banner"><span><Icon name="check" size={36} /></span><div><small>Reward issued</small><h3>{rewardType === "cash" ? `${formatMoney(cash)} through ${wallet}` : `${points} Green Points credited`}</h3><p>Thank you for helping divert recyclable waste from landfill.</p></div></div>
-      <div className="receipt"><div className="receipt-head"><span>TRASH2CASH RECEIPT</span><strong>{transactionId}</strong></div><ReceiptLine label="Material" value={MATERIAL.name} /><ReceiptLine label="Validated weight" value={`${weight.toFixed(1)} kg`} /><ReceiptLine label="Collection center" value={center.name} /><ReceiptLine label="Reward" value={rewardType === "cash" ? `${formatMoney(cash)} · ${wallet}` : `${points} Green Points`} /><ReceiptLine label="Status" value="Completed" /></div>
+      <div className="receipt"><div className="receipt-head"><span>TRASH2CASH RECEIPT</span><strong>{transactionId}</strong></div><ReceiptLine label="Material" value={material.name} /><ReceiptLine label="Validated weight" value={`${weight.toFixed(1)} kg`} /><ReceiptLine label="Collection center" value={center.name} /><ReceiptLine label="Reward" value={rewardType === "cash" ? `${formatMoney(cash)} · ${wallet}` : `${points} Green Points`} /><ReceiptLine label="Status" value="Completed" /></div>
+
+      <div className="message-panel">
+        <div><span className="overline">e-Message</span><h3>Send transaction confirmation</h3><p>{mobile ? `The SMS will be sent to ${mobile}.` : "No valid mobile number is available in the citizen profile."}</p></div>
+        <button className="secondary-action" disabled={messageState === "sending" || messageState === "sent"} onClick={() => void sendConfirmation()}>{messageState === "sending" ? "Sending…" : messageState === "sent" ? "Confirmation sent" : "Send SMS"}</button>
+      </div>
+      {messageText && <div className={messageState === "error" ? "provider-error" : "provider-success"}>{messageText}</div>}
+
       <div className="action-row"><button className="primary-action" onClick={onRestart}><span>Start another transaction</span><Icon name="recycle" /></button></div>
     </Screen>
   );
 }
 
+function ReportModal({ citizen, transactionId, onClose }: { citizen: CitizenProfile | null; transactionId: string; onClose: () => void }) {
+  const [reportType, setReportType] = useState("SERVICE_COMPLAINT");
+  const [subject, setSubject] = useState(`Trash2Cash concern · ${transactionId}`);
+  const [message, setMessage] = useState("");
+  const [mobile, setMobile] = useState(normalizePhMobile(String(citizen?.mobile_number || citizen?.mobile || "")) || "+639171234567");
+  const [email, setEmail] = useState(citizen?.email || "");
+  const [regionCode, setRegionCode] = useState(String(citizen?.region_code || "130000000"));
+  const [provinceCode, setProvinceCode] = useState(String(citizen?.province_code || "138000000"));
+  const [municipalityCode, setMunicipalityCode] = useState(String(citizen?.municipality_code || "138130000"));
+  const [barangayCode, setBarangayCode] = useState(String(citizen?.barangay_code || "138130012"));
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  async function submitReport() {
+    if (!message.trim() || !subject.trim() || !email.trim() || !mobile.trim()) {
+      setResult({ type: "error", text: "Mobile number, email, subject, and report details are required." });
+      return;
+    }
+    setBusy(true);
+    setResult(null);
+    try {
+      const response = await fetch("/api/ereport/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mobile,
+          first_name: citizen?.first_name || "Citizen",
+          last_name: citizen?.last_name || "User",
+          gender: citizen?.gender || "Not specified",
+          complainant_email: email,
+          report_type: reportType,
+          subject,
+          message: `${message}\n\nTrash2Cash transaction: ${transactionId}`,
+          evidences: [],
+          region_code: regionCode,
+          province_code: provinceCode,
+          municipality_code: municipalityCode,
+          barangay_code: barangayCode,
+        }),
+      });
+      const payload = (await response.json()) as { case_number?: string; message?: string; error?: string };
+      if (!response.ok) throw new Error(payload.error || "eReport could not submit the report.");
+      setResult({ type: "success", text: payload.case_number ? `Report submitted. Case number: ${payload.case_number}` : payload.message || "Report submitted successfully." });
+    } catch (error) {
+      setResult({ type: "error", text: error instanceof Error ? error.message : "eReport could not submit the report." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) onClose(); }}>
+      <section className="report-modal" role="dialog" aria-modal="true" aria-labelledby="report-title">
+        <div className="report-modal-head"><div><span className="overline">e-Report</span><h2 id="report-title">Report a Trash2Cash issue</h2></div><button className="modal-close" onClick={onClose} aria-label="Close report form">×</button></div>
+        <p>Send service, weighing, payment, facility, or environmental concerns to the government reporting service.</p>
+        <div className="report-form-grid">
+          <label className="field light-field"><span>Report type</span><div className="field-control"><select value={reportType} onChange={(event) => setReportType(event.target.value)}><option value="SERVICE_COMPLAINT">Service complaint</option><option value="ENVIRONMENTAL_VIOLATION">Environmental violation</option><option value="ILLEGAL_DUMPING">Illegal dumping</option><option value="PAYMENT_CONCERN">Reward concern</option></select></div></label>
+          <label className="field light-field"><span>Mobile number</span><div className="field-control"><input value={mobile} onChange={(event) => setMobile(event.target.value)} /></div></label>
+          <label className="field light-field"><span>Email address</span><div className="field-control"><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} /></div></label>
+          <label className="field light-field span-two"><span>Subject</span><div className="field-control"><input value={subject} onChange={(event) => setSubject(event.target.value)} /></div></label>
+          <label className="field light-field span-two"><span>Report details</span><div className="field-control"><textarea value={message} onChange={(event) => setMessage(event.target.value)} rows={5} placeholder="Explain what happened, where it happened, and the outcome you need." /></div></label>
+        </div>
+        <details className="location-codes"><summary>Location codes</summary><div className="report-form-grid"><label><span>Region</span><input value={regionCode} onChange={(event) => setRegionCode(event.target.value)} /></label><label><span>Province</span><input value={provinceCode} onChange={(event) => setProvinceCode(event.target.value)} /></label><label><span>Municipality</span><input value={municipalityCode} onChange={(event) => setMunicipalityCode(event.target.value)} /></label><label><span>Barangay</span><input value={barangayCode} onChange={(event) => setBarangayCode(event.target.value)} /></label></div></details>
+        {result && <div className={result.type === "error" ? "provider-error" : "provider-success"}>{result.text}</div>}
+        <div className="modal-actions"><button className="secondary-action" onClick={onClose}>Close</button><button className="primary-action" disabled={busy || result?.type === "success"} onClick={() => void submitReport()}><span>{busy ? "Submitting…" : "Submit through e-Report"}</span><Icon name="arrow" /></button></div>
+      </section>
+    </div>
+  );
+}
+
+function normalizePhMobile(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  if (digits.startsWith("63") && digits.length >= 12) return `+${digits}`;
+  if (digits.startsWith("0") && digits.length === 11) return `+63${digits.slice(1)}`;
+  if (digits.startsWith("9") && digits.length === 10) return `+63${digits}`;
+  return value.startsWith("+") ? value : "";
+}
 function InfoAside({ icon, title, text, tags }: { icon: IconName; title: string; text: string; tags: string[] }) {
   return (
     <div className="aside-card dark-card"><span className="aside-icon"><Icon name={icon} size={27} /></span><span className="overline light">Transaction support</span><h2>{title}</h2><p>{text}</p><div className="tag-list">{tags.map((tag) => <span key={tag}>{tag}</span>)}</div></div>
   );
 }
 
-function TransactionAside({ center, weight, reward }: { center: string; weight: string; reward: string }) {
+function TransactionAside({ material, center, weight, reward }: { material: MaterialResult; center: string; weight: string; reward: string }) {
   return (
-    <div className="aside-card summary-card"><span className="overline">Current transaction</span><h2>Recycling summary</h2><div className="summary-material"><span><Icon name="recycle" size={23} /></span><div><strong>{MATERIAL.name}</strong><small>{MATERIAL.quantity} estimated pieces</small></div></div><ReceiptLine label="Collection center" value={center} /><ReceiptLine label="Weight" value={weight} /><ReceiptLine label="Reward" value={reward} /></div>
+    <div className="aside-card summary-card"><span className="overline">Current transaction</span><h2>Recycling summary</h2><div className="summary-material"><span><Icon name="recycle" size={23} /></span><div><strong>{material.name}</strong><small>{material.quantity} estimated pieces</small></div></div><ReceiptLine label="Collection center" value={center} /><ReceiptLine label="Weight" value={weight} /><ReceiptLine label="Reward" value={reward} /></div>
   );
 }
 
