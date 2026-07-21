@@ -3,6 +3,7 @@
 import {
   type ChangeEvent,
   type ReactNode,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -12,6 +13,7 @@ import { QRCodeSVG } from "qrcode.react";
 type Step =
   | "login"
   | "verify"
+  | "dashboard"
   | "capture"
   | "estimate"
   | "center"
@@ -41,7 +43,9 @@ type IconName =
   | "sparkles"
   | "upload"
   | "user"
-  | "wallet";
+  | "wallet"
+  | "tree"
+  | "activity";
 
 type Center = {
   id: string;
@@ -52,6 +56,46 @@ type Center = {
   queue: string;
   accepts: string;
 };
+
+type Activity = {
+  id: string;
+  date: string;
+  material: string;
+  weight: string;
+  reward: string;
+  type: "cash" | "points";
+  center: string;
+};
+
+const RECENT_ACTIVITIES: Activity[] = [
+  {
+    id: "T2C-88A912",
+    date: "Yesterday, 3:45 PM",
+    material: "PET Plastic Bottles",
+    weight: "2.4 kg",
+    reward: "₱72.00",
+    type: "cash",
+    center: "Barangay Central MRF",
+  },
+  {
+    id: "T2C-77B401",
+    date: "Jul 18, 2026",
+    material: "Aluminum Cans",
+    weight: "1.2 kg",
+    reward: "+120 pts",
+    type: "points",
+    center: "GreenCycle Partner Junkshop",
+  },
+  {
+    id: "T2C-65C109",
+    date: "Jul 12, 2026",
+    material: "Cardboard & Paper",
+    weight: "5.0 kg",
+    reward: "₱50.00",
+    type: "cash",
+    center: "City Materials Recovery Facility",
+  },
+];
 
 const MATERIAL = {
   name: "PET Plastic Bottles",
@@ -93,6 +137,7 @@ const CENTERS: Center[] = [
 
 const FLOW_STEPS = [
   { key: "verify", label: "Verify" },
+  { key: "dashboard", label: "Dashboard" },
   { key: "capture", label: "Capture" },
   { key: "estimate", label: "Estimate" },
   { key: "center", label: "Drop-off" },
@@ -109,7 +154,7 @@ function Icon({ name, size = 22 }: { name: IconName; size?: number }) {
     camera: <><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="4"/></>,
     check: <path d="m5 12 4 4L19 6"/>,
     coins: <><ellipse cx="9" cy="7" rx="5" ry="3"/><path d="M4 7v4c0 1.7 2.2 3 5 3 1 0 2-.2 2.8-.6"/><ellipse cx="16" cy="15" rx="5" ry="3"/><path d="M11 15v4c0 1.7 2.2 3 5 3s5-1.3 5-3v-4"/></>,
-    eye: <><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.8"/></>,
+    eye: <><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6Z"/><circle cx="12" cy="12" r="2.8"/></>,
     id: <><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8" cy="11" r="2"/><path d="M5.5 16c.7-2 4.3-2 5 0M13 9h5M13 13h5"/></>,
     leaf: <><path d="M20 4C10 4 5 9 5 15c0 3 2 5 5 5 6 0 10-6 10-16Z"/><path d="M5 20c2-5 6-8 11-11"/></>,
     location: <><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></>,
@@ -121,6 +166,8 @@ function Icon({ name, size = 22 }: { name: IconName; size?: number }) {
     upload: <><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 15v5h16v-5"/></>,
     user: <><circle cx="12" cy="8" r="4"/><path d="M4.5 21a7.5 7.5 0 0 1 15 0"/></>,
     wallet: <><path d="M4 6h15a2 2 0 0 1 2 2v10H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h13"/><path d="M16 11h5v4h-5a2 2 0 1 1 0-4Z"/></>,
+    tree: <><path d="M12 19v3"/><path d="M12 19c-3.5 0-6-2.5-6-6 0-2 1-3.5 2.5-4.5C8 7 9.5 5 12 5s4 2 3.5 3.5C17 9.5 18 11 18 13c0 3.5-2.5 6-6 6Z"/></>,
+    activity: <><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></>,
   };
 
   return (
@@ -189,7 +236,7 @@ export default function Trash2CashApp() {
     setVerificationStage("done");
     notify("Identity verified successfully");
     await wait(350);
-    setStep("capture");
+    setStep("dashboard");
   }
 
   function handlePhoto(event: ChangeEvent<HTMLInputElement>) {
@@ -225,13 +272,14 @@ export default function Trash2CashApp() {
     setActualWeight(1.5);
     setRewardType("cash");
     setWallet("GCash");
-    setStep("capture");
+    setStep("dashboard");
   }
 
   function goBack() {
     const previous: Partial<Record<Step, Step>> = {
       verify: "login",
-      capture: "verify",
+      dashboard: "verify",
+      capture: "dashboard",
       estimate: "capture",
       center: "estimate",
       validation: "center",
@@ -286,7 +334,7 @@ export default function Trash2CashApp() {
 
               <label className="field">
                 <span>Password</span>
-                <div className="field-control"><Icon name="lock" size={19} /><input type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Enter your password" /><button type="button" className="show-password" onClick={() => setShowPassword((current) => !current)} aria-label="Show password"><Icon name="eye" size={18} /></button></div>
+                <div className="field-control"><Icon name="lock" size={19} /><input type={showPassword ? "text" : "password"} value={password} onChange={(event) => setShowPassword((current) => !current)} aria-label="Show password"><Icon name="eye" size={18} /></button></div>
               </label>
 
               <button className="primary-action login-action" disabled={!email.trim() || !password.trim() || loginBusy} onClick={submitLogin}>
@@ -314,10 +362,11 @@ export default function Trash2CashApp() {
       <main className="workspace">
         <div className="workspace-heading">
           <button className="back-button" onClick={goBack}><Icon name="back" size={18} /> Back</button>
-          <span>{Math.max(activeIndex + 1, 1).toString().padStart(2, "0")} / 08</span>
+          <span>{Math.max(activeIndex + 1, 1).toString().padStart(2, "0")} / 09</span>
         </div>
 
         {step === "verify" && <VerifyScreen stage={verificationStage} onVerify={verifyIdentity} />}
+        {step === "dashboard" && <DashboardScreen onStartScan={() => setStep("capture")} />}
         {step === "capture" && <CaptureScreen photo={photo} inputRef={inputRef} onPhoto={handlePhoto} onSample={useSamplePhoto} analyzing={analyzing} onAnalyze={analyzePhoto} />}
         {step === "estimate" && <EstimateScreen onContinue={() => setStep("center")} />}
         {step === "center" && <CenterScreen selected={selectedCenter} onSelect={setSelectedCenter} onContinue={() => setStep("validation")} />}
@@ -398,6 +447,84 @@ function VerificationCard({ icon, number, title, text, state }: { icon: IconName
       <div><small>{number}</small><h3>{title}</h3><p>{text}</p></div>
       <span className="verification-status">{state === "loading" ? "Checking…" : state === "done" ? <Icon name="check" size={17} /> : "Ready"}</span>
     </div>
+  );
+}
+
+function DashboardScreen({ onStartScan }: { onStartScan: () => void }) {
+  return (
+    <Screen
+      eyebrow="Citizen Dashboard"
+      title="Welcome back, Lester."
+      description="Track your earned rewards, total environmental impact, and view recent recycling activities before starting a new drop-off scan."
+      aside={
+        <InfoAside
+          icon="sparkles"
+          title="Ready to recycle?"
+          text="Snap a clear photo of your materials. Our AI will automatically estimate the quantity, weight, and reward value."
+          tags={["Instant AI Estimate", "Accredited Centers"]}
+        />
+      }
+    >
+      <div className="metrics-grid dashboard-metrics">
+        <div className="metric highlight-metric green-metric">
+          <span className="metric-icon"><Icon name="leaf" size={20} /></span>
+          <small>Eco Points Balance</small>
+          <strong>1,420 <span className="unit">pts</span></strong>
+        </div>
+        <div className="metric highlight-metric">
+          <span className="metric-icon"><Icon name="wallet" size={20} /></span>
+          <small>Cash Earned</small>
+          <strong>{formatMoney(480.00)}</strong>
+        </div>
+        <div className="metric">
+          <span className="metric-icon"><Icon name="recycle" size={20} /></span>
+          <small>Plastic Saved</small>
+          <strong>18.6 <span className="unit">kg</span></strong>
+        </div>
+        <div className="metric">
+          <span className="metric-icon"><Icon name="tree" size={20} /></span>
+          <small>Trees Saved</small>
+          <strong>4 <span className="unit">trees</span></strong>
+        </div>
+      </div>
+
+      <div className="action-banner">
+        <div className="banner-copy">
+          <h3>Have recyclable materials ready?</h3>
+          <p>Scan your items now to get an instant AI estimate and drop off at an accredited center.</p>
+        </div>
+        <button className="primary-action" onClick={onStartScan}>
+          <span>Scan Recyclables Now</span>
+          <Icon name="camera" />
+        </button>
+      </div>
+
+      <div className="recent-activity-section">
+        <div className="section-head">
+          <h3><Icon name="activity" size={20} /> Recent Activities</h3>
+          <span className="activity-count">{RECENT_ACTIVITIES.length} transactions</span>
+        </div>
+        <div className="activity-list">
+          {RECENT_ACTIVITIES.map((act) => (
+            <div className="activity-card" key={act.id}>
+              <div className="activity-main">
+                <span className={`activity-badge ${act.type}`}>
+                  <Icon name={act.type === "cash" ? "wallet" : "leaf"} size={16} />
+                </span>
+                <div>
+                  <h4>{act.material}</h4>
+                  <small>{act.center} · {act.date}</small>
+                </div>
+              </div>
+              <div className="activity-side">
+                <strong>{act.reward}</strong>
+                <small>{act.weight}</small>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </Screen>
   );
 }
 
