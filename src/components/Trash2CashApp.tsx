@@ -324,7 +324,7 @@ export default function Trash2CashApp() {
           <section className="login-panel-wrap">
             <div className="login-panel">
               <span className="panel-number">01 / Citizen access</span>
-              <h2>Welcome to Trash2Cash</h2>
+              <h2>Welcome to eKalakal</h2>
               <p>Sign in to begin a verified recycling transaction.</p>
 
               <label className="field">
@@ -403,8 +403,7 @@ export default function Trash2CashApp() {
 function Brand({ dark = false }: { dark?: boolean }) {
   return (
     <div className={dark ? "brand dark" : "brand"}>
-      <span className="brand-mark"><Icon name="recycle" size={23} /></span>
-      <strong>TRASH2CASH</strong>
+      <img src="/logo.png" alt="eKalakal Logo" className="brand-logo" style={{ height: "28px", width: "auto", marginRight: "8px" }} />
     </div>
   );
 }
