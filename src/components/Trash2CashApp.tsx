@@ -334,7 +334,24 @@ export default function Trash2CashApp() {
 
               <label className="field">
                 <span>Password</span>
-                <div className="field-control"><Icon name="lock" size={19} /><input type={showPassword ? "text" : "password"} value={password} onChange={(event) => setShowPassword((current) => !current)} aria-label="Show password"><Icon name="eye" size={18} /></button></div>
+                <div className="field-control">
+                  <Icon name="lock" size={19} />
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    placeholder="Enter your password"
+                    aria-label="Password"
+                  />
+                  <button
+                    type="button"
+                    className="field-button"
+                    onClick={() => setShowPassword((current) => !current)}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    <Icon name="eye" size={18} />
+                  </button>
+                </div>
               </label>
 
               <button className="primary-action login-action" disabled={!email.trim() || !password.trim() || loginBusy} onClick={submitLogin}>
