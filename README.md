@@ -45,7 +45,7 @@ The verification screen supports:
 - Final QR + liveness verification
 - Personal-information verification using the eGovPH citizen profile
 - Event test verification for presentation continuity
-s
+
 ## Connected provider routes
 
 - `POST /api/sso/callback`

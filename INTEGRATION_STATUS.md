@@ -16,6 +16,3 @@
 ## Presentation continuity
 
 External hackathon services can be unavailable, rate-limited, or inaccessible outside the venue network. eGov SSO and identity verification include clearly labelled event-test paths so judges can still complete the entire product flow while the real provider integrations remain in the codebase.
-
-
-npm install @tensorflow/tfjs @tensorflow-models/mobilenet
