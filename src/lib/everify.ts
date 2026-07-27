@@ -122,13 +122,3 @@ export function verifyNationalIdQr(value: string, faceLivenessSessionId: string)
   });
 }
 
-export function verifyPersonalInformation(input: {
-  first_name: string;
-  middle_name?: string;
-  last_name: string;
-  suffix?: string;
-  birth_date: string;
-  face_liveness_session_id: string;
-}) {
-  return callEVerify("/api/query", input);
-}

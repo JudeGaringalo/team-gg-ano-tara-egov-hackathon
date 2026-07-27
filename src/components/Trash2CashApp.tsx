@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import { QRCodeSVG } from "qrcode.react";
+import jsQR from "jsqr";
 
 type Step =
   | "login"
@@ -70,9 +71,6 @@ type EVerifySdk = {
 declare global {
   interface Window {
     eKYC?: () => EVerifySdk;
-    BarcodeDetector?: new (options?: { formats?: string[] }) => {
-      detect: (source: ImageBitmapSource) => Promise<Array<{ rawValue?: string }>>;
-    };
   }
 }
 type IconName =
@@ -251,9 +249,7 @@ function wait(ms: number) {
 export default function Trash2CashApp() {
   const [step, setStep] = useState<Step>("login");
   const [citizen, setCitizen] = useState<CitizenProfile | null>(null);
-  const [exchangeCode, setExchangeCode] = useState("");
   const [loginBusy, setLoginBusy] = useState(false);
-  const [loginError, setLoginError] = useState("");
   const [photo, setPhoto] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [material, setMaterial] = useState<MaterialResult>(DEFAULT_MATERIAL);
@@ -288,16 +284,6 @@ export default function Trash2CashApp() {
       }
     }
 
-    const url = new URL(window.location.href);
-    const code = url.searchParams.get("exchange_code");
-    if (code) {
-      setExchangeCode(code);
-      void submitSsoCode(code, true);
-      url.searchParams.delete("exchange_code");
-      window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
-    }
-    // submitSsoCode is deliberately run only for the initial callback URL.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function notify(message: string) {
@@ -305,38 +291,8 @@ export default function Trash2CashApp() {
     window.setTimeout(() => setToast(null), 2800);
   }
 
-  async function submitSsoCode(code = exchangeCode, fromCallback = false) {
-    if (!code.trim()) {
-      setLoginError("Open Trash2Cash from eGovPH or paste the exchange code provided by the eGovPH callback.");
-      return;
-    }
-
+  async function startSession() {
     setLoginBusy(true);
-    setLoginError("");
-    try {
-      const response = await fetch("/api/sso/callback", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ exchangeCode: code.trim() }),
-      });
-      const payload = (await response.json()) as { profile?: CitizenProfile; error?: string };
-      if (!response.ok || !payload.profile) throw new Error(payload.error || "Unable to complete eGovPH sign-in.");
-
-      setCitizen(payload.profile);
-      window.sessionStorage.setItem("trash2cash-citizen", JSON.stringify(payload.profile));
-      setStep("verify");
-      notify("eGovPH citizen session connected");
-    } catch (error) {
-      setLoginError(error instanceof Error ? error.message : "Unable to complete eGovPH sign-in.");
-      if (fromCallback) setStep("login");
-    } finally {
-      setLoginBusy(false);
-    }
-  }
-
-  async function useEventIdentity() {
-    setLoginBusy(true);
-    setLoginError("");
     await wait(450);
     const profile: CitizenProfile = {
       uniqid: "HACKATHON-CITIZEN-001",
@@ -355,7 +311,7 @@ export default function Trash2CashApp() {
     window.sessionStorage.setItem("trash2cash-citizen", JSON.stringify(profile));
     setLoginBusy(false);
     setStep("verify");
-    notify("Event citizen session started");
+    notify("Citizen session started");
   }
 
   function handlePhoto(event: ChangeEvent<HTMLInputElement>) {
@@ -425,7 +381,6 @@ export default function Trash2CashApp() {
   function logout() {
     window.sessionStorage.removeItem("trash2cash-citizen");
     setCitizen(null);
-    setExchangeCode("");
     setStep("login");
     setPhoto(null);
     setActualWeight(DEFAULT_MATERIAL.estimatedWeight);
@@ -486,33 +441,21 @@ export default function Trash2CashApp() {
               <span className="orbit-label label-three">Secure reward</span>
             </div>
             <div className="story-footer">
-              <span>eGov SSO</span><span>National ID e-Verify</span><span>Face Liveness</span><span>eGov AI</span>
+              <span>National ID e-Verify</span><span>Face Liveness</span><span>eGov AI</span><span>eReport</span><span>eGovPay</span><span>eMessage</span>
             </div>
           </section>
 
           <section className="login-panel-wrap">
             <div className="login-panel">
-              <span className="panel-number">01 / eGovPH citizen access</span>
-              <h2>Sign in to Trash2Cash</h2>
-              <p>When opened from eGovPH, the citizen exchange code is processed automatically. During venue testing, it can also be pasted below.</p>
+              <span className="panel-number">01 / Start recycling</span>
+              <h2>Start your recycling session</h2>
+              <p>Identify recyclable materials, validate them at an accredited collection center, and receive cash or Green Points through one secure flow.</p>
 
-              <label className="field">
-                <span>eGovPH exchange code</span>
-                <div className="field-control"><Icon name="lock" size={19} /><input value={exchangeCode} onChange={(event) => setExchangeCode(event.target.value)} placeholder="Paste exchange_code" autoComplete="off" /></div>
-              </label>
-
-              {loginError && <div className="provider-error" role="alert">{loginError}</div>}
-
-              <button className="primary-action login-action" disabled={!exchangeCode.trim() || loginBusy} onClick={() => void submitSsoCode()}>
-                <span>{loginBusy ? "Connecting to eGovPH…" : "Continue with eGovPH"}</span><Icon name="arrow" />
+              <button className="primary-action full-action" disabled={loginBusy} onClick={() => void startSession()}>
+                <span>{loginBusy ? "Starting session…" : "Start session"}</span><Icon name="arrow" />
               </button>
 
-              <div className="login-divider"><span>Venue testing</span></div>
-              <button className="secondary-action full-action" disabled={loginBusy} onClick={() => void useEventIdentity()}>
-                Use event test identity
-              </button>
-
-              <div className="login-note"><Icon name="lock" size={16} /><p>Partner credentials remain on the Next.js server. The browser receives only the citizen profile needed for this session.</p></div>
+              <div className="login-note"><Icon name="lock" size={16} /><p>This is a venue testing session for the hackathon demonstration.</p></div>
             </div>
           </section>
         </main>
@@ -595,16 +538,11 @@ function Screen({ eyebrow, title, description, aside, children }: { eyebrow: str
 }
 
 function VerifyScreen({ citizen, onVerified }: { citizen: CitizenProfile | null; onVerified: (profile: CitizenProfile) => void }) {
-  const [mode, setMode] = useState<"qr" | "personal">("qr");
   const [qrValue, setQrValue] = useState("");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<"idle" | "qr" | "face" | "done">("idle");
   const [error, setError] = useState("");
   const [cameraOpen, setCameraOpen] = useState(false);
-  const [firstName, setFirstName] = useState(citizen?.first_name || "");
-  const [middleName, setMiddleName] = useState(citizen?.middle_name || "");
-  const [lastName, setLastName] = useState(citizen?.last_name || "");
-  const [birthDate, setBirthDate] = useState(citizen?.birth_date || "");
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const scanningRef = useRef(false);
@@ -634,22 +572,23 @@ function VerifyScreen({ citizen, onVerified }: { citizen: CitizenProfile | null;
       videoRef.current.srcObject = stream;
       await videoRef.current.play();
 
-      if (!window.BarcodeDetector) {
-        setError("Live QR detection is not available in this browser. You may still photograph the QR and paste its encoded value.");
-        return;
-      }
-
-      const detector = new window.BarcodeDetector({ formats: ["qr_code"] });
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d")!;
       scanningRef.current = true;
-      const scan = async () => {
+      const scan = () => {
         if (!scanningRef.current || !videoRef.current) return;
         try {
-          const codes = await detector.detect(videoRef.current);
-          const found = codes.find((item) => item.rawValue)?.rawValue;
-          if (found) {
-            setQrValue(found);
-            stopCamera();
-            return;
+          if (videoRef.current.readyState >= 2) {
+            canvas.width = videoRef.current.videoWidth;
+            canvas.height = videoRef.current.videoHeight;
+            ctx.drawImage(videoRef.current, 0, 0);
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const code = jsQR(imageData.data, imageData.width, imageData.height);
+            if (code) {
+              setQrValue(code.data);
+              stopCamera();
+              return;
+            }
           }
         } catch {
           // Keep scanning while the camera is warming up.
@@ -660,7 +599,7 @@ function VerifyScreen({ citizen, onVerified }: { citizen: CitizenProfile | null;
     } catch (cameraError) {
       console.error(cameraError);
       stopCamera();
-      setError("Camera permission was not granted. Paste the National ID QR value or use profile verification.");
+      setError("Camera permission was not granted. Paste the National ID QR value instead.");
     }
   }
 
@@ -734,34 +673,6 @@ function VerifyScreen({ citizen, onVerified }: { citizen: CitizenProfile | null;
     }
   }
 
-  async function verifyWithProfile() {
-    if (!firstName.trim() || !lastName.trim() || !birthDate) {
-      setError("First name, last name, and birth date are required.");
-      return;
-    }
-    setBusy(true);
-    setError("");
-    setStatus("qr");
-    try {
-      const sessionId = await runFaceLiveness();
-      const response = await fetch("/api/everify/personal", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ firstName, middleName, lastName, birthDate, faceLivenessSessionId: sessionId }),
-      });
-      const payload = (await response.json()) as { profile?: CitizenProfile; error?: string };
-      if (!response.ok || !payload.profile) throw new Error(payload.error || "The citizen profile could not be verified.");
-      setStatus("done");
-      await wait(300);
-      onVerified(payload.profile);
-    } catch (verifyError) {
-      setStatus("idle");
-      setError(verifyError instanceof Error ? verifyError.message : "Citizen verification failed.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function useEventVerification() {
     setBusy(true);
     setError("");
@@ -787,42 +698,28 @@ function VerifyScreen({ citizen, onVerified }: { citizen: CitizenProfile | null;
     <Screen
       eyebrow="National ID verification"
       title="Confirm that the citizen and the person present match."
-      description="Scan the National ID QR, then complete Face Liveness. Personal-information verification is available when the QR cannot be scanned."
+      description="Scan the National ID QR, then complete Face Liveness to confirm the citizen identity."
       aside={<InfoAside icon="id" title="One citizen, one reward" text="National ID e-Verify and Face Liveness help prevent duplicate accounts, impersonation, and repeated reward claims." tags={["e-Verify", "Face Liveness", "Encrypted session"]} />}
     >
       <div className="verification-status-grid">
-        <VerificationCard icon="id" number="01" title="National ID e-Verify" text="Validate the QR or citizen information against the National ID service." state={status === "qr" || status === "face" || status === "done" ? status === "qr" ? "loading" : "done" : "idle"} />
+        <VerificationCard icon="id" number="01" title="National ID e-Verify" text="Validate the QR against the National ID service." state={status === "qr" || status === "face" || status === "done" ? status === "qr" ? "loading" : "done" : "idle"} />
         <VerificationCard icon="user" number="02" title="Face Liveness" text="Use the official camera session to confirm physical presence." state={status === "face" ? "loading" : status === "done" ? "done" : "idle"} />
       </div>
 
-      <div className="verification-tabs">
-        <button className={mode === "qr" ? "active" : ""} onClick={() => { setMode("qr"); setError(""); }}>Scan National ID QR</button>
-        <button className={mode === "personal" ? "active" : ""} onClick={() => { setMode("personal"); setError(""); stopCamera(); }}>Use citizen profile</button>
+      <div className="verify-method-card">
+        <div className="qr-camera-box">
+          {cameraOpen ? <video ref={videoRef} muted playsInline aria-label="National ID QR camera" /> : <div><Icon name="camera" size={34} /><strong>National ID QR camera</strong><span>Use the rear camera and hold the QR inside the frame.</span></div>}
+        </div>
+        <div className="verify-controls">
+          <button className="secondary-action" type="button" onClick={cameraOpen ? stopCamera : () => void startQrCamera()}>{cameraOpen ? "Stop camera" : "Open QR camera"}</button>
+          <label className="field light-field"><span>QR value</span><div className="field-control"><Icon name="id" size={19} /><textarea value={qrValue} onChange={(event) => setQrValue(event.target.value)} placeholder="Scanned value appears here, or paste it manually" rows={4} /></div></label>
+        </div>
       </div>
-
-      {mode === "qr" ? (
-        <div className="verify-method-card">
-          <div className="qr-camera-box">
-            {cameraOpen ? <video ref={videoRef} muted playsInline aria-label="National ID QR camera" /> : <div><Icon name="camera" size={34} /><strong>National ID QR camera</strong><span>Use the rear camera and hold the QR inside the frame.</span></div>}
-          </div>
-          <div className="verify-controls">
-            <button className="secondary-action" type="button" onClick={cameraOpen ? stopCamera : () => void startQrCamera()}>{cameraOpen ? "Stop camera" : "Open QR camera"}</button>
-            <label className="field light-field"><span>QR value</span><div className="field-control"><Icon name="id" size={19} /><textarea value={qrValue} onChange={(event) => setQrValue(event.target.value)} placeholder="Scanned value appears here, or paste it manually" rows={4} /></div></label>
-          </div>
-        </div>
-      ) : (
-        <div className="personal-form-grid">
-          <label className="field light-field"><span>First name</span><div className="field-control"><input value={firstName} onChange={(event) => setFirstName(event.target.value)} /></div></label>
-          <label className="field light-field"><span>Middle name</span><div className="field-control"><input value={middleName} onChange={(event) => setMiddleName(event.target.value)} /></div></label>
-          <label className="field light-field"><span>Last name</span><div className="field-control"><input value={lastName} onChange={(event) => setLastName(event.target.value)} /></div></label>
-          <label className="field light-field"><span>Birth date</span><div className="field-control"><input type="date" value={birthDate} onChange={(event) => setBirthDate(event.target.value)} /></div></label>
-        </div>
-      )}
 
       {error && <div className="provider-error" role="alert">{error}</div>}
 
       <div className="action-row stacked-actions">
-        <button className="primary-action" disabled={busy} onClick={() => void (mode === "qr" ? verifyWithQr() : verifyWithProfile())}>
+        <button className="primary-action" disabled={busy} onClick={() => void verifyWithQr()}>
           <span>{busy ? status === "face" ? "Completing Face Liveness…" : "Checking National ID…" : "Verify citizen"}</span><Icon name="arrow" />
         </button>
         <button className="text-action" disabled={busy} onClick={() => void useEventVerification()}>Use event test verification</button>
