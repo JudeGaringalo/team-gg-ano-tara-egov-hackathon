@@ -10,6 +10,22 @@ function config() {
   return { baseUrl, apiKey };
 }
 
+export async function createCloseLivenessSession() {
+  const { baseUrl, apiKey } = config();
+  const response = await fetch(`${baseUrl}/v1/liveness/session`, {
+    method: "POST",
+    headers: { "x-api-key": apiKey, "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "close", delay: 1200 }),
+    cache: "no-store",
+    signal: withTimeout(),
+  });
+  const payload = await readProviderJson<SessionResponse>(response, "Face Liveness");
+  if (!response.ok || !payload.token || !payload.url) {
+    throw new Error(providerMessage(payload, `Face Liveness could not create a close session (${response.status}).`));
+  }
+  return { token: payload.token, url: payload.url };
+}
+
 export async function createLivenessSession(callbackUrl: string) {
   const { baseUrl, apiKey } = config();
   const response = await fetch(`${baseUrl}/v1/liveness/session`, {

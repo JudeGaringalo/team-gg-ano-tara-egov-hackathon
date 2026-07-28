@@ -65,7 +65,7 @@ type EVerifySdkResult = {
 };
 
 type EVerifySdk = {
-  start: (options: { pubKey: string }) => Promise<EVerifySdkResult>;
+  start: (options: { pubKey: string }) => Promise<{ status: string; result: EVerifySdkResult }>;
 };
 
 declare global {
@@ -73,6 +73,7 @@ declare global {
     eKYC?: () => EVerifySdk;
   }
 }
+
 type IconName =
   | "arrow"
   | "back"
@@ -537,8 +538,46 @@ function Screen({ eyebrow, title, description, aside, children }: { eyebrow: str
   );
 }
 
+type QrCheckResult = {
+  pcn: string;
+  first_name: string;
+  middle_name: string;
+  last_name: string;
+  suffix: string | null;
+  sex: string;
+};
+
+function QrDetailsCard({ data }: { data: QrCheckResult }) {
+  const fullName = [data.first_name, data.middle_name, data.last_name]
+    .filter(Boolean)
+    .join(" ");
+  return (
+    <div className="qr-details-card">
+      <div className="qr-details-header">
+        <div className="qr-details-name">{fullName}</div>
+        <div className="qr-details-meta">
+          <span>PCN {data.pcn}</span>
+          <span>&middot;</span>
+          <span>{data.sex}</span>
+        </div>
+      </div>
+      <div className="qr-details-grid">
+        <div className="qr-detail-item">
+          <span className="qr-detail-label">Sex</span>
+          <span className="qr-detail-value">{data.sex}</span>
+        </div>
+        <div className="qr-detail-item">
+          <span className="qr-detail-label">Suffix</span>
+          <span className="qr-detail-value">{data.suffix || "\u2014"}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function VerifyScreen({ citizen, onVerified }: { citizen: CitizenProfile | null; onVerified: (profile: CitizenProfile) => void }) {
   const [qrValue, setQrValue] = useState("");
+  const [qrDecoded, setQrDecoded] = useState<QrCheckResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<"idle" | "qr" | "face" | "done">("idle");
   const [error, setError] = useState("");
@@ -554,6 +593,25 @@ function VerifyScreen({ citizen, onVerified }: { citizen: CitizenProfile | null;
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     setCameraOpen(false);
+  }
+
+  async function autoCheckQr(value: string) {
+    try {
+      const res = await fetch("/api/everify/qr-check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ value }),
+      });
+      const payload = (await res.json()) as { profile?: QrCheckResult; error?: string };
+      if (res.ok && payload.profile) {
+        setQrDecoded(payload.profile);
+        setError("");
+      } else {
+        setQrDecoded(null);
+      }
+    } catch {
+      setQrDecoded(null);
+    }
   }
 
   async function startQrCamera() {
@@ -587,6 +645,7 @@ function VerifyScreen({ citizen, onVerified }: { citizen: CitizenProfile | null;
             if (code) {
               setQrValue(code.data);
               stopCamera();
+              void autoCheckQr(code.data);
               return;
             }
           }
@@ -633,8 +692,12 @@ function VerifyScreen({ citizen, onVerified }: { citizen: CitizenProfile | null;
 
     if (!window.eKYC) throw new Error("Face Liveness did not initialize in this browser.");
     const result = await window.eKYC().start({ pubKey: publicKey });
-    if (!result.session_id) throw new Error(result.error || "Face Liveness did not return a valid session.");
-    return result.session_id;
+    console.log("[SDK] result keys:", Object.keys(result));
+    console.log("[SDK] result.result keys:", Object.keys(result.result));
+    console.log("[SDK] result.result.session_id:", result.result.session_id);
+    console.log("[SDK] result.result.photo_url:", result.result.photo_url);
+    if (!result.result?.session_id) throw new Error(result.result?.error || "Face Liveness did not return a valid session.");
+    return result.result.session_id;
   }
 
   async function verifyWithQr() {
@@ -646,25 +709,20 @@ function VerifyScreen({ citizen, onVerified }: { citizen: CitizenProfile | null;
     setError("");
     setStatus("qr");
     try {
-      const checkResponse = await fetch("/api/everify/qr-check", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ value: qrValue.trim() }),
-      });
-      const checked = (await checkResponse.json()) as { profile?: CitizenProfile; error?: string };
-      if (!checkResponse.ok) throw new Error(checked.error || "The National ID QR could not be checked.");
-
       const sessionId = await runFaceLiveness();
       const verifyResponse = await fetch("/api/everify/qr-verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ value: qrValue.trim(), faceLivenessSessionId: sessionId }),
       });
-      const verified = (await verifyResponse.json()) as { profile?: CitizenProfile; error?: string };
-      if (!verifyResponse.ok || !verified.profile) throw new Error(verified.error || "National ID verification was not completed.");
+      const payload = (await verifyResponse.json()) as { profile?: CitizenProfile; error?: string };
+      if (!verifyResponse.ok || !payload.profile) throw new Error(payload.error || "National ID verification was not completed.");
+      if ("verified" in payload.profile && payload.profile.verified === false) {
+        throw new Error("Face verification failed. Your face did not match the National ID photo.");
+      }
       setStatus("done");
       await wait(300);
-      onVerified({ ...(checked.profile || {}), ...verified.profile });
+      onVerified(payload.profile);
     } catch (verifyError) {
       setStatus("idle");
       setError(verifyError instanceof Error ? verifyError.message : "National ID verification failed.");
@@ -712,7 +770,11 @@ function VerifyScreen({ citizen, onVerified }: { citizen: CitizenProfile | null;
         </div>
         <div className="verify-controls">
           <button className="secondary-action" type="button" onClick={cameraOpen ? stopCamera : () => void startQrCamera()}>{cameraOpen ? "Stop camera" : "Open QR camera"}</button>
-          <label className="field light-field"><span>QR value</span><div className="field-control"><Icon name="id" size={19} /><textarea value={qrValue} onChange={(event) => setQrValue(event.target.value)} placeholder="Scanned value appears here, or paste it manually" rows={4} /></div></label>
+          {qrDecoded ? (
+            <QrDetailsCard data={qrDecoded} />
+          ) : (
+            <label className="field light-field"><span>QR value</span><div className="field-control"><Icon name="id" size={19} /><textarea value={qrValue} onChange={(event) => setQrValue(event.target.value)} placeholder="Scanned value appears here, or paste it manually" rows={4} /></div></label>
+          )}
         </div>
       </div>
 

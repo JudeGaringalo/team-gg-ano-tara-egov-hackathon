@@ -13,7 +13,7 @@ src/
 ├── app/
 │   ├── layout.tsx               Root HTML shell + metadata
 │   ├── page.tsx                 Entry point — renders Trash2CashApp
-│   ├── globals.css              2658 lines of plain CSS
+│   ├── globals.css              2714 lines of plain CSS
 │   └── api/                     Server-side route handlers
 │       ├── ai-estimate/route.ts         POST — Mock material estimate
 │       ├── validate/route.ts            POST — Mock weight validation + reward calc
@@ -30,7 +30,7 @@ src/
 │       ├── liveness/result/route.ts     POST — Get Face Liveness result
 │       └── egovpay/status/route.ts      POST — eGovPay transaction lookup
 ├── components/
-│   └── Trash2CashApp.tsx        Single 1100-line SPA component
+│   └── Trash2CashApp.tsx        Single 1119-line SPA component
 └── lib/
     ├── provider-http.ts         Shared HTTP utilities
     ├── everify.ts               National ID e-Verify API wrapper
@@ -53,6 +53,7 @@ src/
 | State | `useState` + `sessionStorage`, no external state lib |
 | Image Recognition | TensorFlow.js 4.22.0 + MobileNet 2.1.1 (browser-side) |
 | QR Generation | `qrcode.react` 4.2.0 |
+| QR Decoding | `jsqr` 1.4.0 (browser-side) |
 | Language | TypeScript 5.8.3 (strict mode) |
 | Path Alias | `@/*` → `./src/*` |
 
@@ -63,7 +64,7 @@ src/
 | Step | Purpose |
 |------|---------|
 | `login` | Start session with event test identity (hackathon profile) |
-| `verify` | National ID QR scan + Face Liveness SDK (or personal info form) |
+| `verify` | National ID QR scan + Face Liveness SDK |
 | `capture` | Upload/photo recyclable materials |
 | `estimate` | MobileNet classification + eGov AI guidance |
 | `center` | Select accredited collection center (3 mock options) |
@@ -78,15 +79,16 @@ src/
 
 ## Component Architecture
 
-`src/components/Trash2CashApp.tsx` is a single `"use client"` component (~1100 lines) containing all sub-components inline:
+`src/components/Trash2CashApp.tsx` is a single `"use client"` component (~1119 lines) containing all sub-components inline:
 
 | Sub-component | Purpose |
 |---|---|
 | `Brand` | Logo + app name |
 | `ProgressBar` | 8-step visual progress indicator |
 | `Screen` | Layout wrapper (eyebrow, title, desc, content, aside) |
-| `VerifyScreen` | QR scanning + Face Liveness SDK + personal info form |
+| `VerifyScreen` | QR scanning + Face Liveness SDK |
 | `VerificationCard` | Status card for QR/liveness steps |
+| `QrDetailsCard` | Parsed National ID QR detail display |
 | `CaptureScreen` | Photo upload zone |
 | `BottleScene` | CSS-animated bottle illustration |
 | `EstimateScreen` | Material metrics + AI guidance display |
@@ -176,7 +178,7 @@ All read from `process.env` (`.env.local` at project root):
 
 ## Styling Conventions
 
-- **File**: `src/app/globals.css` (2658 lines, plain CSS)
+- **File**: `src/app/globals.css` (2714 lines, plain CSS)
 - **No Tailwind, no CSS-in-JS, no CSS modules**
 - Naming: kebab-case BEM-like (`.login-page`, `.login-grid`, `.login-panel`, `.primary-action`, etc.)
 - Color scheme defined via `:root` CSS custom properties
