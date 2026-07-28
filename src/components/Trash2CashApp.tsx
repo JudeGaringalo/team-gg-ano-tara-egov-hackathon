@@ -293,7 +293,6 @@ export default function Trash2CashApp() {
     setToast(message);
     window.setTimeout(() => setToast(null), 2800);
   }
-
   async function startSession() {
     setLoginBusy(true);
     await wait(450);
