@@ -468,8 +468,8 @@ export default function Trash2CashApp() {
     <div className="app-shell">
       <header className="app-header">
         <Brand dark />
-        <div className="header-center">Recycling transaction <strong>{transactionId}</strong></div>
         <div className="header-actions">
+          <span className="header-txn">Recycling transaction <strong>{transactionId}</strong></span>
           <button className="report-button" onClick={() => setReportOpen(true)}>Report issue</button>
           <button className="account-button" onClick={logout}><span>{initials}</span><div><strong>{displayName}</strong><small>{step === "verify" ? "Citizen session" : "Verified citizen"}</small></div><Icon name="logout" size={18} /></button>
         </div>
