@@ -22,7 +22,9 @@ type Step =
   | "wallet"
   | "paymentQr"
   | "points"
-  | "complete";
+  | "complete"
+  | "heatmap";
+  | "dashboard";
 
 type RewardType = "cash" | "points";
 type Wallet = "GCash" | "Maya" | "Bank Account";
@@ -71,6 +73,7 @@ type EVerifySdk = {
 declare global {
   interface Window {
     eKYC?: () => EVerifySdk;
+    L?: any;
   }
 }
 
@@ -264,6 +267,7 @@ export default function Trash2CashApp() {
   const [reportOpen, setReportOpen] = useState(false);
   const [qrVerified, setQrVerified] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [heatmapFilter, setHeatmapFilter] = useState<"all" | "pending" | "cleared">("all");
   const inputRef = useRef<HTMLInputElement>(null);
 
   const selectedCenterData = CENTERS.find((center) => center.id === selectedCenter) ?? CENTERS[0];
@@ -275,18 +279,15 @@ export default function Trash2CashApp() {
   const normalizedStep = step === "paymentQr" || step === "points" ? "wallet" : step;
   const activeIndex = useMemo(() => FLOW_STEPS.findIndex((item) => item.key === normalizedStep), [normalizedStep]);
 
-  useEffect(() => {
+useEffect(() => {
     const stored = window.sessionStorage.getItem("trash2cash-citizen");
     if (stored) {
       try {
-        const parsed = JSON.parse(stored) as CitizenProfile;
-        setCitizen(parsed);
-        setStep("verify");
+        JSON.parse(stored) as CitizenProfile;
       } catch {
         window.sessionStorage.removeItem("trash2cash-citizen");
       }
     }
-
   }, []);
 
   function notify(message: string) {
@@ -385,7 +386,6 @@ export default function Trash2CashApp() {
     window.sessionStorage.removeItem("trash2cash-citizen");
     setCitizen(null);
     setQrVerified(false);
-    setAccountOpen(false);
     setStep("login");
     setPhoto(null);
     setActualWeight(DEFAULT_MATERIAL.estimatedWeight);
@@ -417,6 +417,8 @@ export default function Trash2CashApp() {
       paymentQr: "wallet",
       points: "reward",
       complete: rewardType === "cash" ? "paymentQr" : "points",
+      heatmap: "complete",
+      dashboard: "reward",
     };
     setStep(previous[step] ?? "login");
   }
@@ -474,6 +476,7 @@ export default function Trash2CashApp() {
         <Brand dark />
         <div className="header-actions">
           <span className="header-txn">Recycling transaction <strong>{transactionId}</strong></span>
+          <button className="report-button" onClick={() => setStep("heatmap")}>Waste Heatmap</button>
           <button className="report-button" onClick={() => setReportOpen(true)}>Report issue</button>
           <div className="account-dropdown-wrap">
             <button className="account-button" onClick={() => qrVerified && setAccountOpen(v => !v)}><span>{step === "verify" && !qrVerified ? "—" : initials}</span><div><strong>{step === "verify" && !qrVerified ? "Citizen" : displayName}</strong><small>{step === "verify" ? (qrVerified ? "Verified citizen" : "Citizen session") : "Verified citizen"}</small></div></button>
@@ -485,12 +488,13 @@ export default function Trash2CashApp() {
                     <span>{initials}</span>
                     <div>
                       <strong>{displayName}</strong>
-                      <small>Verified citizen</small>
+<small>Verified citizen</small>
                     </div>
                   </div>
                   <div className="account-dropdown-body">
                     <div className="dropdown-mobile-nav">
                       <button className="account-dropdown-option" onClick={() => setAccountOpen(false)}><span className="option-icon">●</span>Recycling transaction <strong style={{fontWeight:600}}>{transactionId}</strong></button>
+                      <button className="account-dropdown-option" onClick={() => { setAccountOpen(false); setStep("heatmap"); }}><span className="option-icon">●</span>Waste Heatmap</button>
                       <button className="account-dropdown-option" onClick={() => { setAccountOpen(false); setReportOpen(true); }}><span className="option-icon">●</span>Report issue</button>
                       <hr className="dropdown-mobile-sep" />
                     </div>
@@ -501,17 +505,21 @@ export default function Trash2CashApp() {
                 </div>
               </>
             )}
+            <button className="account-button" onClick={() => { if (qrVerified) setStep("dashboard"); }}><span>{step === "verify" && !qrVerified ? "—" : initials}</span><div><strong>{step === "verify" && !qrVerified ? "Citizen" : displayName}</strong><small>{step === "verify" ? (qrVerified ? "Verified citizen" : "Citizen session") : "Verified citizen"}</small></div></button>
           </div>
         </div>
       </header>
 
-      <ProgressBar activeIndex={activeIndex} />
+      {step !== "heatmap" && <ProgressBar activeIndex={activeIndex} />}
+      {step !== "dashboard" && <ProgressBar activeIndex={activeIndex} />}
 
       <main className="workspace">
-        <div className="workspace-heading">
-          <button className="back-button" onClick={goBack}><Icon name="back" size={18} /> Back</button>
-          <span>{Math.max(activeIndex + 1, 1).toString().padStart(2, "0")} / 08</span>
-        </div>
+        {step !== "dashboard" && (
+          <div className="workspace-heading">
+            <button className="back-button" onClick={goBack}><Icon name="back" size={18} /> Back</button>
+            <span>{Math.max(activeIndex + 1, 1).toString().padStart(2, "0")} / 08</span>
+          </div>
+        )}
 
         {step === "verify" && <VerifyScreen citizen={citizen} onVerified={(verified) => { setCitizen((current) => ({ ...(current || {}), ...verified })); setQrVerified(true); setStep("capture"); notify("National ID and Face Liveness verified"); }} />}
         {step === "capture" && <CaptureScreen photo={photo} inputRef={inputRef} onPhoto={handlePhoto} onSample={useSamplePhoto} analyzing={analyzing} onAnalyze={analyzePhoto} />}
@@ -522,7 +530,16 @@ export default function Trash2CashApp() {
         {step === "wallet" && <WalletScreen wallet={wallet} setWallet={setWallet} account={account} setAccount={setAccount} cash={finalCash} onContinue={() => setStep("paymentQr")} />}
         {step === "paymentQr" && <PaymentQrScreen material={material} wallet={wallet} cash={finalCash} transactionId={transactionId} payload={qrPayload} onContinue={() => setStep("complete")} />}
         {step === "points" && <PointsScreen points={finalPoints} onContinue={() => setStep("complete")} />}
+        {step === "dashboard" && <DashboardScreen citizen={citizen} displayName={displayName} initials={initials} onBack={() => setStep("reward")} onLogout={logout} />}
         {step === "complete" && <CompleteScreen citizen={citizen} material={material} rewardType={rewardType} wallet={wallet} cash={finalCash} points={finalPoints} weight={actualWeight} center={selectedCenterData} transactionId={transactionId} onRestart={restart} />}
+        {step === "heatmap" && (
+          <section className="heatmap-page">
+            <span className="overline">Spatial Waste Intelligence</span>
+            <h1>Community Waste Heatmap</h1>
+            <p className="screen-description">Real-time visual map of citizen-reported waste hotspots, uncollected trash, and LGU cleanup dispatch status.</p>
+            <HeatmapContent filter={heatmapFilter} onFilterChange={setHeatmapFilter} />
+          </section>
+        )}
       </main>
 
       {reportOpen && <ReportModal citizen={citizen} transactionId={transactionId} onClose={() => setReportOpen(false)} />}
@@ -1174,6 +1191,198 @@ function ReportModal({ citizen, transactionId, onClose }: { citizen: CitizenProf
   );
 }
 
+function HeatmapContent({ filter, onFilterChange }: { filter: "all" | "pending" | "cleared"; onFilterChange: (v: "all" | "pending" | "cleared") => void }) {
+  const mapRef = useRef<HTMLDivElement>(null);
+  const mapInstanceRef = useRef<any>(null);
+  const circlesRef = useRef<any[]>([]);
+  const loadedRef = useRef(false);
+  const [selectedMarker, setSelectedMarker] = useState<typeof HEATMAP_MARKERS[number] | null>(null);
+
+  const HEATMAP_MARKERS = [
+    { id: "1", lat: 14.62, lng: 120.98, location: "Barangay San Antonio, QC", time: "2h ago", category: "Mixed Waste", status: "pending" as const, density: "critical" as const, reportType: "Environmental Violation", subject: "Uncollected waste blocking drainage", details: "Mixed waste has been accumulating for over a week, blocking the drainage canal along Magsaysay Street. Strong odor and stray animals reported in the area.", evidences: [] as string[] },
+    { id: "2", lat: 14.58, lng: 121.04, location: "Barangay Pinyahan, QC", time: "5h ago", category: "Plastic Bottles", status: "pending" as const, density: "moderate" as const, reportType: "Illegal Dumping", subject: "Dumped plastic bottles along sidewalk", details: "Large quantity of plastic bottles illegally dumped along the sidewalk near the public market. Suspected midnight dumping.", evidences: [] as string[] },
+    { id: "3", lat: 14.65, lng: 121.02, location: "Barangay Old Balara, QC", time: "1d ago", category: "E-Waste", status: "dispatched" as const, density: "moderate" as const, reportType: "Service Complaint", subject: "E-waste pickup request", details: "Residents requesting scheduled pickup for collected e-waste (old monitors, keyboards, cables) at the barangay hall.", evidences: [] as string[] },
+    { id: "4", lat: 14.55, lng: 120.95, location: "Barangay La Paz, Makati", time: "3h ago", category: "Construction Waste", status: "pending" as const, density: "critical" as const, reportType: "Environmental Violation", subject: "Construction debris dumped on vacant lot", details: "Unauthorized dumping of construction debris (concrete, wood, metal) on a vacant residential lot. Poses safety hazard to children in the area.", evidences: [] as string[] },
+    { id: "5", lat: 14.60, lng: 120.99, location: "Barangay San Lorenzo, Makati", time: "2d ago", category: "Cardboard", status: "cleared" as const, density: "low" as const, reportType: "Service Complaint", subject: "Cardboard collected and cleared", details: "Accumulated cardboard from nearby retail stores was reported and has been collected by LGU sanitation team.", evidences: [] as string[] },
+    { id: "6", lat: 14.63, lng: 121.01, location: "Barangay UP Campus, QC", time: "6h ago", category: "Mixed Recyclables", status: "dispatched" as const, density: "moderate" as const, reportType: "Illegal Dumping", subject: "Mixed recyclables scattered along bike lane", details: "Mixed recyclable materials (bottles, paper, cans) scattered along the bike lane near the university gate. LGU dispatch en route.", evidences: [] as string[] },
+    { id: "7", lat: 14.56, lng: 120.97, location: "Barangay Bel-Air, Makati", time: "4d ago", category: "Glass Bottles", status: "cleared" as const, density: "low" as const, reportType: "Service Complaint", subject: "Glass bottle collection completed", details: "Glass bottle accumulation at the recycling drop-off point has been collected and processed. Area is now clear.", evidences: [] as string[] },
+  ];
+
+  const filteredMarkers = HEATMAP_MARKERS.filter((m) => {
+    if (filter === "all") return true;
+    return m.status === filter;
+  });
+
+  useEffect(() => {
+    if (loadedRef.current || !mapRef.current) return;
+    loadedRef.current = true;
+
+    const container = mapRef.current;
+
+    function tryInit() {
+      if (mapInstanceRef.current) return;
+      const L = window.L;
+      if (!L) {
+        if (!document.querySelector('script[src*="leaflet"]')) {
+          const link = document.createElement("link");
+          link.id = "leaflet-css";
+          link.rel = "stylesheet";
+          link.href = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css";
+          document.head.appendChild(link);
+          const script = document.createElement("script");
+          script.src = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js";
+          script.onload = tryInit;
+          document.body.appendChild(script);
+        } else {
+          setTimeout(tryInit, 500);
+        }
+        return;
+      }
+      if (!container || container.clientWidth === 0) {
+        setTimeout(tryInit, 200);
+        return;
+      }
+
+      const map = L.map(container, {
+        center: [14.60, 120.98],
+        zoom: 12,
+        zoomControl: true,
+      });
+
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: '&copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>',
+        maxZoom: 18,
+      }).addTo(map);
+
+      mapInstanceRef.current = map;
+      syncCircles(filter);
+      setTimeout(() => map.invalidateSize(), 200);
+    }
+
+    tryInit();
+
+    const fallbackTimer = setTimeout(() => {
+      if (!mapInstanceRef.current && container) {
+        container.innerHTML = '<div class="heatmap-fallback">Map could not be loaded. Please check your internet connection.</div>';
+      }
+    }, 10000);
+
+    return () => {
+      clearTimeout(fallbackTimer);
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+    };
+  }, []);
+
+  function syncCircles(currentFilter: string) {
+    const map = mapInstanceRef.current;
+    if (!map || !window.L) return;
+
+    circlesRef.current.forEach((c: any) => map.removeLayer(c));
+    circlesRef.current = [];
+
+    const L = window.L;
+    const densityConfig: Record<string, { radius: number; color: string; fillOpacity: number }> = {
+      critical: { radius: 500, color: "#ff6c56", fillOpacity: 0.55 },
+      moderate: { radius: 400, color: "#c8ff3d", fillOpacity: 0.45 },
+      low: { radius: 300, color: "#32815c", fillOpacity: 0.35 },
+    };
+
+    for (const marker of HEATMAP_MARKERS) {
+      const show = currentFilter === "all" || marker.status === currentFilter;
+      const cfg = densityConfig[marker.density] || densityConfig.low;
+      const circle = L.circle([marker.lat, marker.lng], {
+        radius: cfg.radius,
+        color: cfg.color,
+        fillColor: cfg.color,
+        fillOpacity: show ? cfg.fillOpacity : 0,
+        opacity: show ? 0.7 : 0,
+        weight: 2,
+      }).addTo(map);
+
+      if (show) {
+        circle.bindPopup(`<b>${marker.location}</b><br/>${marker.category}<br/>${marker.time}<br/>Status: ${marker.status}`);
+      }
+
+      circlesRef.current.push(circle);
+    }
+  }
+
+  useEffect(() => {
+    syncCircles(filter);
+  }, [filter]);
+
+  return (
+    <div className="heatmap-content">
+      <div className="heatmap-tabs">
+        <button className={filter === "all" ? "active" : ""} onClick={() => onFilterChange("all")}>All Hotspots</button>
+        <button className={filter === "pending" ? "active" : ""} onClick={() => onFilterChange("pending")}>Pending LGU Dispatch</button>
+        <button className={filter === "cleared" ? "active" : ""} onClick={() => onFilterChange("cleared")}>Cleared Areas</button>
+      </div>
+
+      <div className="heatmap-map-wrap">
+        <div ref={mapRef} className="heatmap-map" />
+        <div className="heatmap-legend">
+          <span className="overline">Density</span>
+          <div className="heatmap-legend-item"><span className="legend-dot" style={{ background: "#32815c" }} /> Low</div>
+          <div className="heatmap-legend-item"><span className="legend-dot" style={{ background: "#c8ff3d" }} /> Moderate</div>
+          <div className="heatmap-legend-item"><span className="legend-dot" style={{ background: "#ff6c56" }} /> Critical</div>
+        </div>
+      </div>
+
+      <div className="markers-list">
+        <span className="overline">{filteredMarkers.length} report{filteredMarkers.length !== 1 ? "s" : ""}</span>
+        {filteredMarkers.map((marker) => (
+          <div key={marker.id} className="marker-card" onClick={() => setSelectedMarker(marker)}>
+            <div className="marker-card-header">
+              <strong>{marker.location}</strong>
+              <span>{marker.time}</span>
+            </div>
+            <div className="marker-category">{marker.category}</div>
+            <span className={`status-badge ${marker.status}`}>
+              {marker.status === "pending" ? "Pending Dispatch" : marker.status === "dispatched" ? "LGU Dispatched" : "Cleared"}
+            </span>
+          </div>
+        ))}
+        {filteredMarkers.length === 0 && <p className="heatmap-empty">No {filter === "pending" ? "pending" : "cleared"} reports match the current filter.</p>}
+      </div>
+
+      {selectedMarker && (
+        <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) setSelectedMarker(null); }}>
+          <div className="detail-modal">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 }}>
+              <div>
+                <span className="overline">Waste Report</span>
+                <h3 style={{ margin: "6px 0 0", fontSize: 18, letterSpacing: "-0.03em" }}>{selectedMarker.location}</h3>
+              </div>
+              <button className="modal-close" onClick={() => setSelectedMarker(null)}>×</button>
+            </div>
+            <div className="report-form-grid" style={{ marginTop: 0 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}><span className="qr-detail-label">Category</span><span className="qr-detail-value">{selectedMarker.category}</span></div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}><span className="qr-detail-label">Reported</span><span className="qr-detail-value">{selectedMarker.time}</span></div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}><span className="qr-detail-label">Status</span><span className={`status-badge ${selectedMarker.status}`} style={{ marginTop: 2, display: "inline-flex" }}>{selectedMarker.status === "pending" ? "Pending Dispatch" : selectedMarker.status === "dispatched" ? "LGU Dispatched" : "Cleared"}</span></div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}><span className="qr-detail-label">Density</span><span className="qr-detail-value" style={{ textTransform: "capitalize" }}>{selectedMarker.density}</span></div>
+            </div>
+            <div className="report-form-grid" style={{ marginTop: 18 }}>
+              <div className="span-two" style={{ display: "flex", flexDirection: "column", gap: 4 }}><span className="qr-detail-label">Report Type</span><span className="qr-detail-value">{selectedMarker.reportType}</span></div>
+              <div className="span-two" style={{ display: "flex", flexDirection: "column", gap: 4 }}><span className="qr-detail-label">Subject</span><span className="qr-detail-value">{selectedMarker.subject}</span></div>
+              <div className="span-two"><span className="qr-detail-label">Report Details</span><p style={{ margin: "6px 0 0", fontSize: 13, lineHeight: 1.6, color: "var(--ink)" }}>{selectedMarker.details}</p></div>
+            </div>
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, marginTop: 18 }}>
+              <button className="primary-action" style={{ minHeight: 36, padding: "0 14px", fontSize: 11 }} onClick={() => { const m = mapInstanceRef.current; if (m) { m.setView([selectedMarker.lat, selectedMarker.lng], 14, { animate: true }); } setSelectedMarker(null); }}>
+                <span>View on map</span><Icon name="location" size={14} />
+              </button>
+              <button className="secondary-action" style={{ minHeight: 36, padding: "0 14px", fontSize: 11 }} onClick={() => setSelectedMarker(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function normalizePhMobile(value: string): string {
   const digits = value.replace(/\D/g, "");
   if (digits.startsWith("63") && digits.length >= 12) return `+${digits}`;
@@ -1199,4 +1408,453 @@ function Metric({ label, value }: { label: string; value: string }) {
 
 function ReceiptLine({ label, value }: { label: string; value: string }) {
   return <div className="receipt-line"><span>{label}</span><strong>{value}</strong></div>;
+}
+
+function DashboardScreen({ onBack, citizen, displayName, initials, onLogout }: { onBack: () => void; citizen: CitizenProfile | null; displayName: string; initials: string; onLogout: () => void }) {
+  const totalBalance = 1250.00;
+  const totalPoints = 1420;
+  const conversionRate = 0.88;
+  const plasticRecycledKg = 42.5;
+  const carbonSavedKg = Math.round(plasticRecycledKg * 2.5 * 10) / 10;
+  const totalItemsRecycled = 584;
+  const collectionSessions = 37;
+  const maxRecycledTarget = 100;
+  const maxCarbonTarget = 300;
+  const maxItemsTarget = 2000;
+  const maxSessionsTarget = 100;
+  const recycledProgress = Math.min(plasticRecycledKg / maxRecycledTarget * 100, 100);
+  const carbonProgress = Math.min(carbonSavedKg / maxCarbonTarget * 100, 100);
+  const itemsProgress = Math.min(totalItemsRecycled / maxItemsTarget * 100, 100);
+  const sessionsProgress = Math.min(collectionSessions / maxSessionsTarget * 100, 100);
+
+  const allTransactions = [
+    { date: "Jul 15, 2026", location: "Barangay Central MRF", kg: "1.5 kg", points: 150, peso: formatMoney(45), type: "earned" },
+    { date: "Jul 10, 2026", location: "GreenCycle Junkshop", kg: "2.0 kg", points: 90, peso: formatMoney(24), type: "earned" },
+    { date: "Jul 08, 2026", location: "Online Store", kg: "--", points: -200, peso: formatMoney(-60), type: "redeemed" },
+    { date: "Jun 28, 2026", location: "Barangay Central MRF", kg: "0.5 kg", points: 70, peso: formatMoney(27.50), type: "earned" },
+    { date: "Jun 20, 2026", location: "Partner Cafe", kg: "--", points: -100, peso: formatMoney(-30), type: "redeemed" },
+    { date: "Jun 14, 2026", location: "City MRF", kg: "1.8 kg", points: 54, peso: formatMoney(7.20), type: "earned" },
+  ];
+
+  const [filterTab, setFilterTab] = useState<"all" | "earned" | "redeemed">("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [dateFilterOpen, setDateFilterOpen] = useState(false);
+  const [sectionTab, setSectionTab] = useState<"impact" | "transactions">("impact");
+  const [txnPage, setTxnPage] = useState(1);
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const pageSize = 5;
+
+  const rawTransactions = allTransactions.filter((txn) => {
+    if (filterTab === "earned" && txn.type !== "earned") return false;
+    if (filterTab === "redeemed" && txn.type !== "redeemed") return false;
+    if (dateFrom && new Date(txn.date) < new Date(dateFrom)) return false;
+    if (dateTo && new Date(txn.date) > new Date(dateTo)) return false;
+    return true;
+  });
+
+  const totalPages = Math.max(1, Math.ceil(rawTransactions.length / pageSize));
+  const safePage = Math.min(txnPage, totalPages);
+  const transactions = rawTransactions.slice((safePage - 1) * pageSize, safePage * pageSize);
+
+  const handleFilterTab = (tab: "all" | "earned" | "redeemed") => {
+    setFilterTab(tab);
+    setTxnPage(1);
+  };
+
+  const handleTxnPage = (page: number) => {
+    if (page >= 1 && page <= totalPages) setTxnPage(page);
+  };
+
+  return (
+    <div className="dashboard-screen">
+      <div className="dashboard-top-bar">
+        <button className="back-button" onClick={onBack}><Icon name="back" size={18} /> Back</button>
+      </div>
+
+      <div className="account-section">
+        <span className="overline">Account</span>
+        <div className="account-card">
+          <div className="account-card-left">
+            <span className="account-card-avatar">{initials}</span>
+            <div className="account-card-info">
+              <strong>{displayName}</strong>
+              <small>{citizen?.email || "Verified citizen"}</small>
+            </div>
+          </div>
+          <button className="account-card-signout" onClick={onLogout}>Sign out <Icon name="logout" /></button>
+        </div>
+      </div>
+
+      <div className="dashboard-hero">
+        <div className="dashboard-hero-left">
+          <span className="dashboard-hero-icon"><Icon name="wallet" size={28} /></span>
+          <div>
+            <small>Total Balance</small>
+            <strong className="dashboard-hero-amount">{formatMoney(totalBalance)}</strong>
+          </div>
+        </div>
+        <div className="dashboard-hero-right">
+          <div className="dashboard-hero-stat">
+            <span className="dashboard-hero-stat-value">{totalPoints.toLocaleString()}</span>
+            <span className="dashboard-hero-stat-label">Green Points</span>
+          </div>
+          <div className="dashboard-hero-rate">
+            1 point = {formatMoney(conversionRate)}
+          </div>
+        </div>
+      </div>
+
+      <div className="dashboard-actions">
+        <button className="primary-action withdraw-action" onClick={() => setWithdrawOpen(true)}>
+          <span>Withdraw</span>
+          <Icon name="wallet" />
+        </button>
+      </div>
+
+      <div className="section-tabs">
+        <button className={`section-tab ${sectionTab === "impact" ? "is-active" : ""}`} onClick={() => setSectionTab("impact")}>Environmental Impact</button>
+        <button className={`section-tab ${sectionTab === "transactions" ? "is-active" : ""}`} onClick={() => setSectionTab("transactions")}>Transaction History</button>
+      </div>
+
+      {sectionTab === "impact" && (
+      <div className="impact-section">
+        <span className="overline">Environmental Impact</span>
+        <h2>Your contribution to sustainability</h2>
+        <div className="impact-grid">
+          <ImpactCard
+            icon="recycle"
+            label="Plastic Recycled"
+            value={`${plasticRecycledKg} kg`}
+            progress={recycledProgress}
+            color="var(--lime)"
+          />
+          <ImpactCard
+            icon="leaf"
+            label="Carbon Emissions Saved"
+            value={`${carbonSavedKg} kg CO₂`}
+            progress={carbonProgress}
+            color="var(--green)"
+          />
+          <ImpactCard
+            icon="check"
+            label="Total Items Recycled"
+            value={`${totalItemsRecycled} items`}
+            progress={itemsProgress}
+            color="var(--green)"
+          />
+          <ImpactCard
+            icon="location"
+            label="Collection Sessions"
+            value={`${collectionSessions} sessions`}
+            progress={sessionsProgress}
+            color="var(--lime)"
+          />
+      </div>
+    </div>
+    )}
+
+      {sectionTab === "transactions" && (
+      <div className="txn-section">
+        <span className="overline">Transaction History</span>
+        <h2>Recent recycling transactions</h2>
+        <div className="txn-filters">
+          <div className="txn-filter-tabs">
+            {(["all", "earned", "redeemed"] as const).map((tab) => (
+              <button
+                key={tab}
+                className={`txn-filter-tab ${filterTab === tab ? "is-active" : ""}`}
+                onClick={() => handleFilterTab(tab)}
+              >
+                {tab === "all" ? "All" : tab === "earned" ? "Earned" : "Redeemed"}
+              </button>
+            ))}
+          </div>
+          <div className="txn-filter-dates">
+            <button className={`txn-filter-date-toggle ${dateFrom || dateTo ? "has-range" : ""}`} onClick={() => setDateFilterOpen((v) => !v)}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+              <span>{dateFrom || dateTo ? `${dateFrom ? new Date(dateFrom).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "Any"} — ${dateTo ? new Date(dateTo).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "Any"}` : "Date range"}</span>
+              <span className={`txn-filter-date-caret ${dateFilterOpen ? "is-open" : ""}`}><Icon name="back" size={10} /></span>
+            </button>
+            {dateFilterOpen && (
+              <div className="txn-filter-date-panel">
+                <label className="txn-filter-date-field">
+                  <span>From</span>
+                  <input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setTxnPage(1); }} />
+                </label>
+                <label className="txn-filter-date-field">
+                  <span>To</span>
+                  <input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setTxnPage(1); }} />
+                </label>
+                {(dateFrom || dateTo) && (
+                  <button className="txn-filter-date-clear" onClick={() => { setDateFrom(""); setDateTo(""); setTxnPage(1); }}>Clear</button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="txn-list">
+          {transactions.map((txn, i) => (
+            <div className={`txn-row ${txn.type === "redeemed" ? "is-redeemed" : ""}`} key={i}>
+              <div className="txn-row-main">
+                <span className="txn-date">{txn.date}</span>
+                <span className="txn-location">{txn.location}</span>
+                <span className="txn-kg">{txn.kg}</span>
+              </div>
+              <div className="txn-row-meta">
+                <span className={`txn-points ${txn.type === "redeemed" ? "is-negative" : ""}`}>{txn.points > 0 ? "+" : ""}{txn.points} pts</span>
+                <strong className="txn-peso">{txn.peso}</strong>
+              </div>
+            </div>
+          ))}
+        </div>
+        {totalPages > 1 && (
+        <div className="txn-pagination">
+          <button className="txn-page-btn" disabled={safePage <= 1} onClick={() => handleTxnPage(safePage - 1)}><Icon name="back" size={14} /></button>
+          {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+            <button key={p} className={`txn-page-btn ${p === safePage ? "is-active" : ""}`} onClick={() => handleTxnPage(p)}>{p}</button>
+          ))}
+          <button className="txn-page-btn" disabled={safePage >= totalPages} onClick={() => handleTxnPage(safePage + 1)}><span style={{ display: "inline-flex", transform: "rotate(180deg)" }}><Icon name="back" size={14} /></span></button>
+        </div>
+        )}
+      </div>
+      )}
+      {withdrawOpen && (
+        <div className="withdraw-modal-backdrop" onClick={() => setWithdrawOpen(false)}>
+          <div className="withdraw-modal" onClick={(e) => e.stopPropagation()}>
+            <WithdrawFlow citizen={citizen} displayName={displayName} initials={initials} onClose={() => setWithdrawOpen(false)} />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function WithdrawFlow({ citizen, displayName, initials, onClose }: { citizen: CitizenProfile | null; displayName: string; initials: string; onClose: () => void }) {
+  const CENTERS_LIST = CENTERS;
+  const amount = 1000;
+  const txnid = "TESTREF123";
+
+  const [subStep, setSubStep] = useState<"center" | "wallet" | "qr" | "receipt" | "complete">("center");
+  const [selectedCenter, setSelectedCenter] = useState(CENTERS_LIST[0].id);
+  const [wallet, setWallet] = useState<Wallet>("GCash");
+  const [account, setAccount] = useState("");
+  const [egovPayUuid, setEgovPayUuid] = useState("");
+  const [egovPayUrl, setEgovPayUrl] = useState("");
+  const [txnData, setTxnData] = useState<Record<string, unknown> | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const selectedCenterData = CENTERS_LIST.find((c) => c.id === selectedCenter) ?? CENTERS_LIST[0];
+
+  function goBackSub() {
+    if (subStep === "center") { onClose(); return; }
+    if (subStep === "wallet") { setSubStep("center"); return; }
+    if (subStep === "qr") { setSubStep("wallet"); return; }
+    if (subStep === "receipt") { setSubStep("qr"); return; }
+    if (subStep === "complete") { setSubStep("receipt"); return; }
+  }
+
+  const subTitle = subStep === "center" ? "Select drop-off center" : subStep === "wallet" ? "Select payment channel" : subStep === "qr" ? "Payment QR" : subStep === "receipt" ? "Transaction details" : "Complete";
+
+  async function handleGeneratePayment() {
+    setLoading(true);
+    setError("");
+    try {
+      const response = await fetch("/api/egovpay/collection", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: 1000,
+          txnid: "TESTREF123",
+          redirectUrl: window.location.origin,
+          callbackUrl: `${window.location.origin}/api/egovpay/callback`,
+          mobile: citizen?.mobile || citizen?.mobile_number || "",
+          email: citizen?.email || "",
+          name: displayName,
+          digestOverride: "c5989a520055e65025a695bb1483b30b6cd7923c79c648fff5e757bbabc62fa2",
+        }),
+      });
+      const payload = await response.json() as { transaction?: { uuid?: string; url?: string }; error?: string };
+      if (!response.ok) throw new Error(payload.error || "Payment generation failed");
+      if (!payload.transaction?.uuid || !payload.transaction?.url) throw new Error("Invalid payment response");
+      setEgovPayUuid(payload.transaction.uuid);
+      setEgovPayUrl(payload.transaction.url);
+      setSubStep("qr");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to process payment");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleConfirmPayment() {
+    setLoading(true);
+    setError("");
+    try {
+      const response = await fetch("/api/egovpay/status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uuid: egovPayUuid }),
+      });
+      const payload = await response.json() as { transaction?: Record<string, unknown>; error?: string };
+      if (!response.ok) throw new Error(payload.error || "Status check failed");
+      setTxnData(payload.transaction ?? null);
+      setSubStep("receipt");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to verify transaction");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="withdraw-flow-content">
+      <div className="withdraw-flow-header">
+        <div className="workspace-heading" style={{ marginBottom: 0 }}>
+          <button className="back-button" onClick={goBackSub}><Icon name="back" size={18} /> Back</button>
+          <span className="overline">{subTitle}</span>
+          <button className="withdraw-modal-close" onClick={onClose}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+        </div>
+      </div>
+
+        {subStep === "center" && (
+          <div>
+            <div className="center-list">
+              {CENTERS_LIST.map((center) => (
+                <button
+                  key={center.id}
+                  className={selectedCenter === center.id ? "center-card selected" : "center-card"}
+                  onClick={() => setSelectedCenter(center.id)}
+                >
+                  <span className="radio">{selectedCenter === center.id && <i />}</span>
+                  <div className="center-copy"><div className="center-title"><h3>{center.name}</h3><span>{center.distance}</span></div><p>{center.address}</p><div className="center-meta"><span>{center.schedule}</span><span>{center.queue}</span><span>{center.accepts}</span></div></div>
+                </button>
+              ))}
+            </div>
+            <div className="action-row"><button className="primary-action" onClick={() => setSubStep("wallet")}><span>Continue</span><Icon name="arrow" /></button></div>
+          </div>
+        )}
+
+        {subStep === "wallet" && (
+          <div>
+            <div className="wallet-grid">
+              {([{ name: "GCash" as Wallet, mark: "G", helper: "Mobile wallet" }, { name: "Maya" as Wallet, mark: "M", helper: "Mobile wallet" }, { name: "Bank Account" as Wallet, mark: "B", helper: "Supported bank" }]).map((item) => (
+                <button key={item.name} className={wallet === item.name ? "wallet-card selected" : "wallet-card"} onClick={() => setWallet(item.name)}>
+                  <span className={`wallet-mark ${item.mark.toLowerCase()}`}>{item.mark}</span>
+                  <div><h3>{item.name}</h3><small>{item.helper}</small></div>
+                  <span className="radio">{wallet === item.name && <i />}</span>
+                </button>
+              ))}
+            </div>
+            <label className="field light-field"><span>{wallet === "Bank Account" ? "Bank account reference" : `${wallet} mobile number`}</span><div className="field-control"><Icon name="wallet" size={19} /><input value={account} onChange={(e) => setAccount(e.target.value)} placeholder={wallet === "Bank Account" ? "Enter account reference" : "09XX XXX XXXX"} /></div></label>
+            <div className="action-row"><button className="primary-action" disabled={!account.trim() || loading} onClick={() => void handleGeneratePayment()}><span>{loading ? "Generating…" : "Generate payment QR"}</span><Icon name="arrow" /></button></div>
+          </div>
+        )}
+
+        {subStep === "qr" && (
+          <div>
+            <div className="qr-section">
+              <div className="qr-card">
+                <div className="qr-provider">
+                  <span className={`wallet-mark ${wallet === "GCash" ? "g" : wallet === "Maya" ? "m" : "b"}`}>{wallet.charAt(0)}</span>
+                  <div><h3>{wallet}</h3><small>Payment partner</small></div>
+                </div>
+                <div className="qr-code">
+                  <QRCodeSVG value={egovPayUrl} size={220} level="M" includeMargin />
+                </div>
+                <div className="qr-value">
+                  <small>Withdrawal amount</small>
+                  <strong>{formatMoney(amount)}</strong>
+                  <span>{txnid}</span>
+                </div>
+              </div>
+              <div className="claim-steps">
+                <span className="overline">How to claim</span>
+                <ol>
+                  <li><b>01</b><p>Open your selected payment channel.</p></li>
+                  <li><b>02</b><p>Scan or present the claim QR code.</p></li>
+                  <li><b>03</b><p>Confirm that the reward was received.</p></li>
+                </ol>
+              </div>
+            </div>
+            {error && <div className="provider-error">{error}</div>}
+            <div className="action-row"><button className="primary-action" disabled={loading} onClick={() => void handleConfirmPayment()}><span>{loading ? "Verifying…" : "Confirm reward received"}</span><Icon name="check" /></button></div>
+          </div>
+        )}
+
+        {subStep === "receipt" && (
+          <div>
+            <div className="complete-banner">
+              <span><Icon name="check" size={36} /></span>
+              <div>
+                <small>Withdrawal initiated</small>
+                <h3>{formatMoney(amount)} through {wallet}</h3>
+                <p>Your withdrawal request is being processed. The funds will be credited to your {wallet} account.</p>
+              </div>
+            </div>
+            <div className="receipt">
+              <div className="receipt-head">
+                <span>TRASH2CASH WITHDRAWAL</span>
+                <strong>{txnid}</strong>
+              </div>
+              <ReceiptLine label="Amount" value={formatMoney(amount)} />
+              <ReceiptLine label="Payment channel" value={wallet} />
+              <ReceiptLine label="Account" value={account} />
+              <ReceiptLine label="Collection center" value={selectedCenterData.name} />
+              <ReceiptLine label="eGovPay UUID" value={egovPayUuid} />
+              <ReceiptLine label="Status" value={txnData?.payment_status === "INITIAL" ? "Unpaid" : String(txnData?.payment_status || "Processing")} />
+            </div>
+            {error && <div className="provider-error">{error}</div>}
+            <div className="action-row"><button className="primary-action" onClick={() => setSubStep("complete")}><span>Done</span><Icon name="check" /></button></div>
+          </div>
+        )}
+
+        {subStep === "complete" && (
+          <div>
+            <div className="complete-banner">
+              <span><Icon name="check" size={36} /></span>
+              <div>
+                <small>Withdrawal complete</small>
+                <h3>{formatMoney(amount)} to {wallet}</h3>
+                <p>Your withdrawal request has been submitted. Check your {wallet} account for the funds.</p>
+              </div>
+            </div>
+            <div className="action-row"><button className="primary-action" onClick={onClose}><span>Back to profile</span><Icon name="user" /></button></div>
+          </div>
+        )}
+      </div>
+  );
+}
+
+function ImpactCard({ icon, label, value, progress, color }: { icon: IconName; label: string; value: string; progress: number; color: string }) {
+  const radius = 54;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (progress / 100) * circumference;
+
+  return (
+    <div className="impact-card">
+      <div className="impact-ring-wrap">
+        <svg className="impact-ring" viewBox="0 0 128 128" aria-hidden="true">
+          <circle className="impact-ring-bg" cx="64" cy="64" r={radius} />
+          <circle
+            className="impact-ring-fg"
+            cx="64"
+            cy="64"
+            r={radius}
+            stroke={color}
+            strokeDasharray={circumference}
+            strokeDashoffset={offset}
+          />
+        </svg>
+        <div className="impact-ring-icon">
+          <Icon name={icon} size={26} />
+        </div>
+      </div>
+      <div className="impact-body">
+        <small className="impact-label">{label}</small>
+        <strong className="impact-value">{value}</strong>
+      </div>
+    </div>
+  );
 }

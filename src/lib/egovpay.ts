@@ -8,7 +8,7 @@ export type EGovPayTransaction = {
   [key: string]: unknown;
 };
 
-type TransactionResponse = { data?: EGovPayTransaction; message?: string; error?: string };
+type TransactionResponse = { data?: EGovPayTransaction; message?: string; error?: string; errors?: unknown; error_description?: string };
 
 function config() {
   const baseUrl = normalizeBaseUrl(process.env.EGOV_PAY_BASE_URL, "https://egovpay-pgi-dev.oueg.info");
@@ -27,20 +27,22 @@ export async function createEGovPayCollection(input: {
   email?: string;
   name?: string;
   description?: Record<string, unknown>;
+  digestOverride?: string;
 }): Promise<EGovPayTransaction> {
   const { baseUrl, apiKey, settlementTemplateUuid } = config();
   const amount = Number(input.amount.toFixed(2));
-  const digest = createHmac("sha256", apiKey).update(`${amount}|${input.txnid}`).digest("hex");
-  const expires = new Date(Date.now() + 30 * 60 * 1000).toISOString().slice(0, 19).replace("T", " ");
+  const amountStr = amount.toFixed(2);
+  const digestSeed = `${amountStr}|${input.txnid}`;
+  const digest = input.digestOverride || createHmac("sha256", apiKey).update(digestSeed).digest("hex");
+  const expires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 19).replace("T", " ");
 
-  const body = {
+  console.debug("[eGovPay] digest seed:", digestSeed, "digest:", digest);
+
+  const body: Record<string, unknown> = {
     amount,
     settlement_template_uuid: settlementTemplateUuid,
     currency: "PHP",
     digest,
-    mobile: input.mobile,
-    email: input.email,
-    name: input.name,
     expires_at: expires,
     link_expires_at: expires,
     callback_url: input.callbackUrl,
@@ -49,6 +51,9 @@ export async function createEGovPayCollection(input: {
     description: input.description || { purpose: "Trash2Cash transaction" },
     items: [{ name: "Trash2Cash transaction", amount }],
   };
+  if (input.mobile) body.mobile = input.mobile;
+  if (input.email) body.email = input.email;
+  if (input.name) body.name = input.name;
 
   const response = await fetch(`${baseUrl}/api/v1/transaction`, {
     method: "POST",
@@ -59,7 +64,8 @@ export async function createEGovPayCollection(input: {
   });
   const payload = await readProviderJson<TransactionResponse>(response, "eGovPay");
   if (!response.ok || !payload.data) {
-    throw new Error(providerMessage(payload, `eGovPay could not create the transaction (${response.status}).`));
+    const detail = payload?.errors ? ` — ${JSON.stringify(payload.errors)}` : "";
+    throw new Error(providerMessage(payload, `eGovPay could not create the transaction (${response.status}).`) + detail);
   }
   return payload.data;
 }
@@ -74,7 +80,8 @@ export async function getEGovPayTransaction(uuid: string): Promise<EGovPayTransa
   });
   const payload = await readProviderJson<TransactionResponse>(response, "eGovPay");
   if (!response.ok || !payload.data) {
-    throw new Error(providerMessage(payload, `eGovPay could not retrieve the transaction (${response.status}).`));
+    const detail = payload?.errors ? ` — ${JSON.stringify(payload.errors)}` : "";
+    throw new Error(providerMessage(payload, `eGovPay could not retrieve the transaction (${response.status}).`) + detail);
   }
   return payload.data;
 }
