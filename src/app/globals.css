@@ -2776,6 +2776,9 @@ select {
   margin-top: 20px;
 }
 
+.dropdown-mobile-nav { display: none; }
+.dropdown-mobile-sep { display: none; }
+
 @media (max-width: 760px) {
   .header-actions {
     gap: 6px;
@@ -2814,6 +2817,9 @@ select {
   .account-button div {
     display: none;
   }
+
+  .dropdown-mobile-nav { display: block; }
+  .dropdown-mobile-sep { display: block; border: 0; border-top: 1px solid var(--gray-200); margin: 6px 0; }
 
   .app-header {
     display: flex;

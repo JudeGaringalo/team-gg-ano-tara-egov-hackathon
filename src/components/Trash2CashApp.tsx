@@ -489,6 +489,11 @@ export default function Trash2CashApp() {
                     </div>
                   </div>
                   <div className="account-dropdown-body">
+                    <div className="dropdown-mobile-nav">
+                      <button className="account-dropdown-option" onClick={() => setAccountOpen(false)}><span className="option-icon">●</span>Recycling transaction <strong style={{fontWeight:600}}>{transactionId}</strong></button>
+                      <button className="account-dropdown-option" onClick={() => { setAccountOpen(false); setReportOpen(true); }}><span className="option-icon">●</span>Report issue</button>
+                      <hr className="dropdown-mobile-sep" />
+                    </div>
                     <button className="account-dropdown-option" onClick={() => setAccountOpen(false)}><span className="option-icon">●</span>Points / Withdraw</button>
                     <button className="account-dropdown-option" onClick={() => setAccountOpen(false)}><span className="option-icon">●</span>Transaction history</button>
                     <button className="account-dropdown-option logout" onClick={() => { setAccountOpen(false); logout(); }}><span className="option-icon">●</span>Sign out</button>
