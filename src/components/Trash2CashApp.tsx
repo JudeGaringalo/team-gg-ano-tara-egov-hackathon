@@ -263,6 +263,7 @@ export default function Trash2CashApp() {
   const [toast, setToast] = useState<string | null>(null);
   const [reportOpen, setReportOpen] = useState(false);
   const [qrVerified, setQrVerified] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const selectedCenterData = CENTERS.find((center) => center.id === selectedCenter) ?? CENTERS[0];
@@ -385,6 +386,7 @@ export default function Trash2CashApp() {
     window.sessionStorage.removeItem("trash2cash-citizen");
     setCitizen(null);
     setQrVerified(false);
+    setAccountOpen(false);
     setStep("login");
     setPhoto(null);
     setActualWeight(DEFAULT_MATERIAL.estimatedWeight);
@@ -474,7 +476,28 @@ export default function Trash2CashApp() {
         <div className="header-actions">
           <span className="header-txn">Recycling transaction <strong>{transactionId}</strong></span>
           <button className="report-button" onClick={() => setReportOpen(true)}>Report issue</button>
-          <button className="account-button" onClick={logout}><span>{step === "verify" && !qrVerified ? "—" : initials}</span><div><strong>{step === "verify" && !qrVerified ? "Citizen" : displayName}</strong><small>{step === "verify" ? (qrVerified ? "Verified citizen" : "Citizen session") : "Verified citizen"}</small></div><Icon name="logout" size={18} /></button>
+          <div className="account-dropdown-wrap">
+            <button className="account-button" onClick={() => qrVerified && setAccountOpen(v => !v)}><span>{step === "verify" && !qrVerified ? "—" : initials}</span><div><strong>{step === "verify" && !qrVerified ? "Citizen" : displayName}</strong><small>{step === "verify" ? (qrVerified ? "Verified citizen" : "Citizen session") : "Verified citizen"}</small></div></button>
+            {accountOpen && (
+              <>
+                <div className="dropdown-backdrop" onClick={() => setAccountOpen(false)} />
+                <div className="account-dropdown">
+                  <div className="account-dropdown-head">
+                    <span>{initials}</span>
+                    <div>
+                      <strong>{displayName}</strong>
+                      <small>Verified citizen</small>
+                    </div>
+                  </div>
+                  <div className="account-dropdown-body">
+                    <button className="account-dropdown-option" onClick={() => setAccountOpen(false)}><span className="option-icon">●</span>Points / Withdraw</button>
+                    <button className="account-dropdown-option" onClick={() => setAccountOpen(false)}><span className="option-icon">●</span>Transaction history</button>
+                    <button className="account-dropdown-option logout" onClick={() => { setAccountOpen(false); logout(); }}><span className="option-icon">●</span>Sign out</button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </header>
 
