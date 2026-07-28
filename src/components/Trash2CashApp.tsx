@@ -302,7 +302,7 @@ export default function Trash2CashApp() {
       first_name: "Lester",
       last_name: "Garingalo",
       email: "lesterjudeag@gmail.com",
-      mobile: "+639171234567",
+      mobile: "+639274542237",
       birth_date: "1995-12-02",
       gender: "Male",
       region_code: "130000000",
@@ -773,7 +773,7 @@ function VerifyScreen({ citizen, onVerified }: { citizen: CitizenProfile | null;
       last_name: citizen?.last_name || "Garingalo",
       birth_date: citizen?.birth_date || "1995-12-02",
       gender: citizen?.gender || "Male",
-      mobile_number: citizen?.mobile_number || citizen?.mobile || "+639171234567",
+      mobile_number: citizen?.mobile_number || citizen?.mobile || "+639274542237",
       code: "EVENT-VERIFIED",
     });
   }
@@ -1049,50 +1049,84 @@ function ReportModal({ citizen, transactionId, onClose }: { citizen: CitizenProf
   const [reportType, setReportType] = useState("SERVICE_COMPLAINT");
   const [subject, setSubject] = useState(`Trash2Cash concern · ${transactionId}`);
   const [message, setMessage] = useState("");
-  const [mobile, setMobile] = useState(normalizePhMobile(String(citizen?.mobile_number || citizen?.mobile || "")) || "+639171234567");
+  const [mobile, setMobile] = useState(normalizePhMobile(String(citizen?.mobile_number || citizen?.mobile || "")) || "+639274542237");
   const [email, setEmail] = useState(citizen?.email || "");
-  const [regionCode, setRegionCode] = useState(String(citizen?.region_code || "130000000"));
-  const [provinceCode, setProvinceCode] = useState(String(citizen?.province_code || "138000000"));
-  const [municipalityCode, setMunicipalityCode] = useState(String(citizen?.municipality_code || "138130000"));
-  const [barangayCode, setBarangayCode] = useState(String(citizen?.barangay_code || "138130012"));
+  const [regionCode, setRegionCode] = useState("040000000");
+  const [provinceCode, setProvinceCode] = useState("042100000");
+  const [municipalityCode, setMunicipalityCode] = useState("042111000");
+  const [barangayCode, setBarangayCode] = useState("042111011");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [firstName, setFirstName] = useState(citizen?.first_name || "");
+  const [lastName, setLastName] = useState(citizen?.last_name || "");
+  const [gender, setGender] = useState(citizen?.gender || "Prefer not to say");
+  const [evidences, setEvidences] = useState<string[]>([]);
+  const evidenceInputRef = useRef<HTMLInputElement>(null);
 
-  async function submitReport() {
+  function addEvidence(file: File) {
+    if (evidences.length >= 3) return;
+    setEvidences(prev => [...prev, URL.createObjectURL(file)]);
+  }
+
+  function removeEvidence(index: number) {
+    URL.revokeObjectURL(evidences[index]);
+    setEvidences(prev => prev.filter((_, i) => i !== index));
+  }
+
+  function handleEvidenceInput(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    addEvidence(file);
+    event.target.value = "";
+  }
+
+  const REPORT_TYPE_MAP: Record<string, string> = {
+    SERVICE_COMPLAINT: "red_tape",
+    ENVIRONMENTAL_VIOLATION: "crime",
+    ILLEGAL_DUMPING: "crime",
+    PAYMENT_CONCERN: "scam",
+  };
+
+  function submitReport() {
     if (!message.trim() || !subject.trim() || !email.trim() || !mobile.trim()) {
       setResult({ type: "error", text: "Mobile number, email, subject, and report details are required." });
       return;
     }
     setBusy(true);
     setResult(null);
-    try {
-      const response = await fetch("/api/ereport/submit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          mobile,
-          first_name: citizen?.first_name || "Citizen",
-          last_name: citizen?.last_name || "User",
-          gender: citizen?.gender || "Not specified",
-          complainant_email: email,
-          report_type: reportType,
-          subject,
-          message: `${message}\n\nTrash2Cash transaction: ${transactionId}`,
-          evidences: [],
-          region_code: regionCode,
-          province_code: provinceCode,
-          municipality_code: municipalityCode,
-          barangay_code: barangayCode,
-        }),
-      });
-      const payload = (await response.json()) as { case_number?: string; message?: string; error?: string };
-      if (!response.ok) throw new Error(payload.error || "eReport could not submit the report.");
-      setResult({ type: "success", text: payload.case_number ? `Report submitted. Case number: ${payload.case_number}` : payload.message || "Report submitted successfully." });
-    } catch (error) {
-      setResult({ type: "error", text: error instanceof Error ? error.message : "eReport could not submit the report." });
-    } finally {
-      setBusy(false);
-    }
+    const mobile639 = mobile.replace(/^\+/, "");
+    (async () => {
+      try {
+        const response = await fetch("/api/ereport/submit", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mobile: mobile639,
+            first_name: firstName || citizen?.first_name || "Citizen",
+            last_name: lastName || citizen?.last_name || "User",
+            gender: gender || citizen?.gender || "Not specified",
+            complainant_email: email,
+            report_type: REPORT_TYPE_MAP[reportType] || reportType,
+            subject,
+            message,
+            evidences: [],
+            region_code: regionCode,
+            province_code: provinceCode,
+            municipality_code: municipalityCode,
+            barangay_code: barangayCode,
+            latitude: "14.60",
+            longitude: "120.98",
+          }),
+        });
+        const payload = (await response.json()) as { case_number?: string; message?: string; error?: string };
+        if (!response.ok) throw new Error(payload.error || "eReport could not submit the report.");
+        setResult({ type: "success", text: payload.case_number ? `Report submitted. Case number: ${payload.case_number}` : payload.message || "Report submitted successfully." });
+      } catch (error) {
+        setResult({ type: "error", text: error instanceof Error ? error.message : "eReport could not submit the report." });
+      } finally {
+        setBusy(false);
+      }
+    })();
   }
 
   return (
@@ -1104,8 +1138,29 @@ function ReportModal({ citizen, transactionId, onClose }: { citizen: CitizenProf
           <label className="field light-field"><span>Report type</span><div className="field-control"><select value={reportType} onChange={(event) => setReportType(event.target.value)}><option value="SERVICE_COMPLAINT">Service complaint</option><option value="ENVIRONMENTAL_VIOLATION">Environmental violation</option><option value="ILLEGAL_DUMPING">Illegal dumping</option><option value="PAYMENT_CONCERN">Reward concern</option></select></div></label>
           <label className="field light-field"><span>Mobile number</span><div className="field-control"><input value={mobile} onChange={(event) => setMobile(event.target.value)} /></div></label>
           <label className="field light-field"><span>Email address</span><div className="field-control"><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} /></div></label>
+          <label className="field light-field"><span>First name</span><div className="field-control"><input value={firstName} onChange={(event) => setFirstName(event.target.value)} /></div></label>
+          <label className="field light-field"><span>Last name</span><div className="field-control"><input value={lastName} onChange={(event) => setLastName(event.target.value)} /></div></label>
+          <label className="field light-field"><span>Gender</span><div className="field-control"><select value={gender} onChange={(event) => setGender(event.target.value)}><option value="Male">Male</option><option value="Female">Female</option><option value="Prefer not to say">Prefer not to say</option></select></div></label>
           <label className="field light-field span-two"><span>Subject</span><div className="field-control"><input value={subject} onChange={(event) => setSubject(event.target.value)} /></div></label>
           <label className="field light-field span-two"><span>Report details</span><div className="field-control"><textarea value={message} onChange={(event) => setMessage(event.target.value)} rows={5} placeholder="Explain what happened, where it happened, and the outcome you need." /></div></label>
+        </div>
+        <div className="evidence-section">
+          <span className="evidence-label">Evidence photos <small>(at least 1, up to 3)</small></span>
+          <div className="evidence-grid">
+            {evidences.map((url, index) => (
+              <div className="evidence-thumb" key={index}>
+                <img src={url} alt={`Evidence ${index + 1}`} />
+                <button className="evidence-remove" onClick={() => removeEvidence(index)} aria-label="Remove photo">×</button>
+              </div>
+            ))}
+            {evidences.length < 3 && (
+              <div className="evidence-add" onClick={() => evidenceInputRef.current?.click()} role="button" tabIndex={0}>
+                <span>+</span>
+              </div>
+            )}
+          </div>
+          {evidences.length === 0 && <p className="evidence-hint">Add at least one photo to proceed</p>}
+          <input ref={evidenceInputRef} hidden type="file" accept="image/*" capture="environment" onChange={handleEvidenceInput} />
         </div>
         <details className="location-codes"><summary>Location codes</summary><div className="report-form-grid"><label><span>Region</span><input value={regionCode} onChange={(event) => setRegionCode(event.target.value)} /></label><label><span>Province</span><input value={provinceCode} onChange={(event) => setProvinceCode(event.target.value)} /></label><label><span>Municipality</span><input value={municipalityCode} onChange={(event) => setMunicipalityCode(event.target.value)} /></label><label><span>Barangay</span><input value={barangayCode} onChange={(event) => setBarangayCode(event.target.value)} /></label></div></details>
         {result && <div className={result.type === "error" ? "provider-error" : "provider-success"}>{result.text}</div>}
