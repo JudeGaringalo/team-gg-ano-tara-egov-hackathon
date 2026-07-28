@@ -15,7 +15,6 @@ function loadEnvFile(filePath) {
 
   return values;
 }
-
 const envPath = path.resolve(process.cwd(), ".env.local");
 if (!fs.existsSync(envPath)) {
   console.error("Missing .env.local");
