@@ -262,6 +262,7 @@ export default function Trash2CashApp() {
   const [account, setAccount] = useState("0917 123 4567");
   const [toast, setToast] = useState<string | null>(null);
   const [reportOpen, setReportOpen] = useState(false);
+  const [qrVerified, setQrVerified] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const selectedCenterData = CENTERS.find((center) => center.id === selectedCenter) ?? CENTERS[0];
@@ -309,6 +310,7 @@ export default function Trash2CashApp() {
       barangay_code: "138130012",
     };
     setCitizen(profile);
+    setQrVerified(false);
     window.sessionStorage.setItem("trash2cash-citizen", JSON.stringify(profile));
     setLoginBusy(false);
     setStep("verify");
@@ -382,6 +384,7 @@ export default function Trash2CashApp() {
   function logout() {
     window.sessionStorage.removeItem("trash2cash-citizen");
     setCitizen(null);
+    setQrVerified(false);
     setStep("login");
     setPhoto(null);
     setActualWeight(DEFAULT_MATERIAL.estimatedWeight);
@@ -471,7 +474,7 @@ export default function Trash2CashApp() {
         <div className="header-actions">
           <span className="header-txn">Recycling transaction <strong>{transactionId}</strong></span>
           <button className="report-button" onClick={() => setReportOpen(true)}>Report issue</button>
-          <button className="account-button" onClick={logout}><span>{initials}</span><div><strong>{displayName}</strong><small>{step === "verify" ? "Citizen session" : "Verified citizen"}</small></div><Icon name="logout" size={18} /></button>
+          <button className="account-button" onClick={logout}><span>{step === "verify" && !qrVerified ? "—" : initials}</span><div><strong>{step === "verify" && !qrVerified ? "Citizen" : displayName}</strong><small>{step === "verify" ? (qrVerified ? "Verified citizen" : "Citizen session") : "Verified citizen"}</small></div><Icon name="logout" size={18} /></button>
         </div>
       </header>
 
@@ -483,7 +486,7 @@ export default function Trash2CashApp() {
           <span>{Math.max(activeIndex + 1, 1).toString().padStart(2, "0")} / 08</span>
         </div>
 
-        {step === "verify" && <VerifyScreen citizen={citizen} onVerified={(verified) => { setCitizen((current) => ({ ...(current || {}), ...verified })); setStep("capture"); notify("National ID and Face Liveness verified"); }} />}
+        {step === "verify" && <VerifyScreen citizen={citizen} onVerified={(verified) => { setCitizen((current) => ({ ...(current || {}), ...verified })); setQrVerified(true); setStep("capture"); notify("National ID and Face Liveness verified"); }} />}
         {step === "capture" && <CaptureScreen photo={photo} inputRef={inputRef} onPhoto={handlePhoto} onSample={useSamplePhoto} analyzing={analyzing} onAnalyze={analyzePhoto} />}
         {step === "estimate" && <EstimateScreen material={material} guidance={aiGuidance} onContinue={() => setStep("center")} />}
         {step === "center" && <CenterScreen material={material} selected={selectedCenter} onSelect={setSelectedCenter} onContinue={() => setStep("validation")} />}
