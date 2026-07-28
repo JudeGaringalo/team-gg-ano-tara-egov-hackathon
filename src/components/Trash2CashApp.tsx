@@ -23,6 +23,7 @@ type Step =
   | "paymentQr"
   | "points"
   | "complete"
+  | "heatmap";
   | "dashboard";
 
 type RewardType = "cash" | "points";
@@ -72,6 +73,7 @@ type EVerifySdk = {
 declare global {
   interface Window {
     eKYC?: () => EVerifySdk;
+    L?: any;
   }
 }
 
@@ -264,6 +266,8 @@ export default function Trash2CashApp() {
   const [toast, setToast] = useState<string | null>(null);
   const [reportOpen, setReportOpen] = useState(false);
   const [qrVerified, setQrVerified] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [heatmapFilter, setHeatmapFilter] = useState<"all" | "pending" | "cleared">("all");
   const inputRef = useRef<HTMLInputElement>(null);
 
   const selectedCenterData = CENTERS.find((center) => center.id === selectedCenter) ?? CENTERS[0];
@@ -275,18 +279,15 @@ export default function Trash2CashApp() {
   const normalizedStep = step === "paymentQr" || step === "points" ? "wallet" : step;
   const activeIndex = useMemo(() => FLOW_STEPS.findIndex((item) => item.key === normalizedStep), [normalizedStep]);
 
-  useEffect(() => {
+useEffect(() => {
     const stored = window.sessionStorage.getItem("trash2cash-citizen");
     if (stored) {
       try {
-        const parsed = JSON.parse(stored) as CitizenProfile;
-        setCitizen(parsed);
-        setStep("verify");
+        JSON.parse(stored) as CitizenProfile;
       } catch {
         window.sessionStorage.removeItem("trash2cash-citizen");
       }
     }
-
   }, []);
 
   function notify(message: string) {
@@ -416,6 +417,7 @@ export default function Trash2CashApp() {
       paymentQr: "wallet",
       points: "reward",
       complete: rewardType === "cash" ? "paymentQr" : "points",
+      heatmap: "complete",
       dashboard: "reward",
     };
     setStep(previous[step] ?? "login");
@@ -474,13 +476,41 @@ export default function Trash2CashApp() {
         <Brand dark />
         <div className="header-actions">
           <span className="header-txn">Recycling transaction <strong>{transactionId}</strong></span>
+          <button className="report-button" onClick={() => setStep("heatmap")}>Waste Heatmap</button>
           <button className="report-button" onClick={() => setReportOpen(true)}>Report issue</button>
           <div className="account-dropdown-wrap">
+            <button className="account-button" onClick={() => qrVerified && setAccountOpen(v => !v)}><span>{step === "verify" && !qrVerified ? "—" : initials}</span><div><strong>{step === "verify" && !qrVerified ? "Citizen" : displayName}</strong><small>{step === "verify" ? (qrVerified ? "Verified citizen" : "Citizen session") : "Verified citizen"}</small></div></button>
+            {accountOpen && (
+              <>
+                <div className="dropdown-backdrop" onClick={() => setAccountOpen(false)} />
+                <div className="account-dropdown">
+                  <div className="account-dropdown-head">
+                    <span>{initials}</span>
+                    <div>
+                      <strong>{displayName}</strong>
+<small>Verified citizen</small>
+                    </div>
+                  </div>
+                  <div className="account-dropdown-body">
+                    <div className="dropdown-mobile-nav">
+                      <button className="account-dropdown-option" onClick={() => setAccountOpen(false)}><span className="option-icon">●</span>Recycling transaction <strong style={{fontWeight:600}}>{transactionId}</strong></button>
+                      <button className="account-dropdown-option" onClick={() => { setAccountOpen(false); setStep("heatmap"); }}><span className="option-icon">●</span>Waste Heatmap</button>
+                      <button className="account-dropdown-option" onClick={() => { setAccountOpen(false); setReportOpen(true); }}><span className="option-icon">●</span>Report issue</button>
+                      <hr className="dropdown-mobile-sep" />
+                    </div>
+                    <button className="account-dropdown-option" onClick={() => setAccountOpen(false)}><span className="option-icon">●</span>Points / Withdraw</button>
+                    <button className="account-dropdown-option" onClick={() => setAccountOpen(false)}><span className="option-icon">●</span>Transaction history</button>
+                    <button className="account-dropdown-option logout" onClick={() => { setAccountOpen(false); logout(); }}><span className="option-icon">●</span>Sign out</button>
+                  </div>
+                </div>
+              </>
+            )}
             <button className="account-button" onClick={() => { if (qrVerified) setStep("dashboard"); }}><span>{step === "verify" && !qrVerified ? "—" : initials}</span><div><strong>{step === "verify" && !qrVerified ? "Citizen" : displayName}</strong><small>{step === "verify" ? (qrVerified ? "Verified citizen" : "Citizen session") : "Verified citizen"}</small></div></button>
           </div>
         </div>
       </header>
 
+      {step !== "heatmap" && <ProgressBar activeIndex={activeIndex} />}
       {step !== "dashboard" && <ProgressBar activeIndex={activeIndex} />}
 
       <main className="workspace">
@@ -502,6 +532,14 @@ export default function Trash2CashApp() {
         {step === "points" && <PointsScreen points={finalPoints} onContinue={() => setStep("complete")} />}
         {step === "dashboard" && <DashboardScreen citizen={citizen} displayName={displayName} initials={initials} onBack={() => setStep("reward")} onLogout={logout} />}
         {step === "complete" && <CompleteScreen citizen={citizen} material={material} rewardType={rewardType} wallet={wallet} cash={finalCash} points={finalPoints} weight={actualWeight} center={selectedCenterData} transactionId={transactionId} onRestart={restart} />}
+        {step === "heatmap" && (
+          <section className="heatmap-page">
+            <span className="overline">Spatial Waste Intelligence</span>
+            <h1>Community Waste Heatmap</h1>
+            <p className="screen-description">Real-time visual map of citizen-reported waste hotspots, uncollected trash, and LGU cleanup dispatch status.</p>
+            <HeatmapContent filter={heatmapFilter} onFilterChange={setHeatmapFilter} />
+          </section>
+        )}
       </main>
 
       {reportOpen && <ReportModal citizen={citizen} transactionId={transactionId} onClose={() => setReportOpen(false)} />}
@@ -1149,6 +1187,198 @@ function ReportModal({ citizen, transactionId, onClose }: { citizen: CitizenProf
         {result && <div className={result.type === "error" ? "provider-error" : "provider-success"}>{result.text}</div>}
         <div className="modal-actions"><button className="secondary-action" onClick={onClose}>Close</button><button className="primary-action" disabled={busy || result?.type === "success"} onClick={() => void submitReport()}><span>{busy ? "Submitting…" : "Submit through e-Report"}</span><Icon name="arrow" /></button></div>
       </section>
+    </div>
+  );
+}
+
+function HeatmapContent({ filter, onFilterChange }: { filter: "all" | "pending" | "cleared"; onFilterChange: (v: "all" | "pending" | "cleared") => void }) {
+  const mapRef = useRef<HTMLDivElement>(null);
+  const mapInstanceRef = useRef<any>(null);
+  const circlesRef = useRef<any[]>([]);
+  const loadedRef = useRef(false);
+  const [selectedMarker, setSelectedMarker] = useState<typeof HEATMAP_MARKERS[number] | null>(null);
+
+  const HEATMAP_MARKERS = [
+    { id: "1", lat: 14.62, lng: 120.98, location: "Barangay San Antonio, QC", time: "2h ago", category: "Mixed Waste", status: "pending" as const, density: "critical" as const, reportType: "Environmental Violation", subject: "Uncollected waste blocking drainage", details: "Mixed waste has been accumulating for over a week, blocking the drainage canal along Magsaysay Street. Strong odor and stray animals reported in the area.", evidences: [] as string[] },
+    { id: "2", lat: 14.58, lng: 121.04, location: "Barangay Pinyahan, QC", time: "5h ago", category: "Plastic Bottles", status: "pending" as const, density: "moderate" as const, reportType: "Illegal Dumping", subject: "Dumped plastic bottles along sidewalk", details: "Large quantity of plastic bottles illegally dumped along the sidewalk near the public market. Suspected midnight dumping.", evidences: [] as string[] },
+    { id: "3", lat: 14.65, lng: 121.02, location: "Barangay Old Balara, QC", time: "1d ago", category: "E-Waste", status: "dispatched" as const, density: "moderate" as const, reportType: "Service Complaint", subject: "E-waste pickup request", details: "Residents requesting scheduled pickup for collected e-waste (old monitors, keyboards, cables) at the barangay hall.", evidences: [] as string[] },
+    { id: "4", lat: 14.55, lng: 120.95, location: "Barangay La Paz, Makati", time: "3h ago", category: "Construction Waste", status: "pending" as const, density: "critical" as const, reportType: "Environmental Violation", subject: "Construction debris dumped on vacant lot", details: "Unauthorized dumping of construction debris (concrete, wood, metal) on a vacant residential lot. Poses safety hazard to children in the area.", evidences: [] as string[] },
+    { id: "5", lat: 14.60, lng: 120.99, location: "Barangay San Lorenzo, Makati", time: "2d ago", category: "Cardboard", status: "cleared" as const, density: "low" as const, reportType: "Service Complaint", subject: "Cardboard collected and cleared", details: "Accumulated cardboard from nearby retail stores was reported and has been collected by LGU sanitation team.", evidences: [] as string[] },
+    { id: "6", lat: 14.63, lng: 121.01, location: "Barangay UP Campus, QC", time: "6h ago", category: "Mixed Recyclables", status: "dispatched" as const, density: "moderate" as const, reportType: "Illegal Dumping", subject: "Mixed recyclables scattered along bike lane", details: "Mixed recyclable materials (bottles, paper, cans) scattered along the bike lane near the university gate. LGU dispatch en route.", evidences: [] as string[] },
+    { id: "7", lat: 14.56, lng: 120.97, location: "Barangay Bel-Air, Makati", time: "4d ago", category: "Glass Bottles", status: "cleared" as const, density: "low" as const, reportType: "Service Complaint", subject: "Glass bottle collection completed", details: "Glass bottle accumulation at the recycling drop-off point has been collected and processed. Area is now clear.", evidences: [] as string[] },
+  ];
+
+  const filteredMarkers = HEATMAP_MARKERS.filter((m) => {
+    if (filter === "all") return true;
+    return m.status === filter;
+  });
+
+  useEffect(() => {
+    if (loadedRef.current || !mapRef.current) return;
+    loadedRef.current = true;
+
+    const container = mapRef.current;
+
+    function tryInit() {
+      if (mapInstanceRef.current) return;
+      const L = window.L;
+      if (!L) {
+        if (!document.querySelector('script[src*="leaflet"]')) {
+          const link = document.createElement("link");
+          link.id = "leaflet-css";
+          link.rel = "stylesheet";
+          link.href = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css";
+          document.head.appendChild(link);
+          const script = document.createElement("script");
+          script.src = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js";
+          script.onload = tryInit;
+          document.body.appendChild(script);
+        } else {
+          setTimeout(tryInit, 500);
+        }
+        return;
+      }
+      if (!container || container.clientWidth === 0) {
+        setTimeout(tryInit, 200);
+        return;
+      }
+
+      const map = L.map(container, {
+        center: [14.60, 120.98],
+        zoom: 12,
+        zoomControl: true,
+      });
+
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: '&copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>',
+        maxZoom: 18,
+      }).addTo(map);
+
+      mapInstanceRef.current = map;
+      syncCircles(filter);
+      setTimeout(() => map.invalidateSize(), 200);
+    }
+
+    tryInit();
+
+    const fallbackTimer = setTimeout(() => {
+      if (!mapInstanceRef.current && container) {
+        container.innerHTML = '<div class="heatmap-fallback">Map could not be loaded. Please check your internet connection.</div>';
+      }
+    }, 10000);
+
+    return () => {
+      clearTimeout(fallbackTimer);
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+    };
+  }, []);
+
+  function syncCircles(currentFilter: string) {
+    const map = mapInstanceRef.current;
+    if (!map || !window.L) return;
+
+    circlesRef.current.forEach((c: any) => map.removeLayer(c));
+    circlesRef.current = [];
+
+    const L = window.L;
+    const densityConfig: Record<string, { radius: number; color: string; fillOpacity: number }> = {
+      critical: { radius: 500, color: "#ff6c56", fillOpacity: 0.55 },
+      moderate: { radius: 400, color: "#c8ff3d", fillOpacity: 0.45 },
+      low: { radius: 300, color: "#32815c", fillOpacity: 0.35 },
+    };
+
+    for (const marker of HEATMAP_MARKERS) {
+      const show = currentFilter === "all" || marker.status === currentFilter;
+      const cfg = densityConfig[marker.density] || densityConfig.low;
+      const circle = L.circle([marker.lat, marker.lng], {
+        radius: cfg.radius,
+        color: cfg.color,
+        fillColor: cfg.color,
+        fillOpacity: show ? cfg.fillOpacity : 0,
+        opacity: show ? 0.7 : 0,
+        weight: 2,
+      }).addTo(map);
+
+      if (show) {
+        circle.bindPopup(`<b>${marker.location}</b><br/>${marker.category}<br/>${marker.time}<br/>Status: ${marker.status}`);
+      }
+
+      circlesRef.current.push(circle);
+    }
+  }
+
+  useEffect(() => {
+    syncCircles(filter);
+  }, [filter]);
+
+  return (
+    <div className="heatmap-content">
+      <div className="heatmap-tabs">
+        <button className={filter === "all" ? "active" : ""} onClick={() => onFilterChange("all")}>All Hotspots</button>
+        <button className={filter === "pending" ? "active" : ""} onClick={() => onFilterChange("pending")}>Pending LGU Dispatch</button>
+        <button className={filter === "cleared" ? "active" : ""} onClick={() => onFilterChange("cleared")}>Cleared Areas</button>
+      </div>
+
+      <div className="heatmap-map-wrap">
+        <div ref={mapRef} className="heatmap-map" />
+        <div className="heatmap-legend">
+          <span className="overline">Density</span>
+          <div className="heatmap-legend-item"><span className="legend-dot" style={{ background: "#32815c" }} /> Low</div>
+          <div className="heatmap-legend-item"><span className="legend-dot" style={{ background: "#c8ff3d" }} /> Moderate</div>
+          <div className="heatmap-legend-item"><span className="legend-dot" style={{ background: "#ff6c56" }} /> Critical</div>
+        </div>
+      </div>
+
+      <div className="markers-list">
+        <span className="overline">{filteredMarkers.length} report{filteredMarkers.length !== 1 ? "s" : ""}</span>
+        {filteredMarkers.map((marker) => (
+          <div key={marker.id} className="marker-card" onClick={() => setSelectedMarker(marker)}>
+            <div className="marker-card-header">
+              <strong>{marker.location}</strong>
+              <span>{marker.time}</span>
+            </div>
+            <div className="marker-category">{marker.category}</div>
+            <span className={`status-badge ${marker.status}`}>
+              {marker.status === "pending" ? "Pending Dispatch" : marker.status === "dispatched" ? "LGU Dispatched" : "Cleared"}
+            </span>
+          </div>
+        ))}
+        {filteredMarkers.length === 0 && <p className="heatmap-empty">No {filter === "pending" ? "pending" : "cleared"} reports match the current filter.</p>}
+      </div>
+
+      {selectedMarker && (
+        <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) setSelectedMarker(null); }}>
+          <div className="detail-modal">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 }}>
+              <div>
+                <span className="overline">Waste Report</span>
+                <h3 style={{ margin: "6px 0 0", fontSize: 18, letterSpacing: "-0.03em" }}>{selectedMarker.location}</h3>
+              </div>
+              <button className="modal-close" onClick={() => setSelectedMarker(null)}>×</button>
+            </div>
+            <div className="report-form-grid" style={{ marginTop: 0 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}><span className="qr-detail-label">Category</span><span className="qr-detail-value">{selectedMarker.category}</span></div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}><span className="qr-detail-label">Reported</span><span className="qr-detail-value">{selectedMarker.time}</span></div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}><span className="qr-detail-label">Status</span><span className={`status-badge ${selectedMarker.status}`} style={{ marginTop: 2, display: "inline-flex" }}>{selectedMarker.status === "pending" ? "Pending Dispatch" : selectedMarker.status === "dispatched" ? "LGU Dispatched" : "Cleared"}</span></div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}><span className="qr-detail-label">Density</span><span className="qr-detail-value" style={{ textTransform: "capitalize" }}>{selectedMarker.density}</span></div>
+            </div>
+            <div className="report-form-grid" style={{ marginTop: 18 }}>
+              <div className="span-two" style={{ display: "flex", flexDirection: "column", gap: 4 }}><span className="qr-detail-label">Report Type</span><span className="qr-detail-value">{selectedMarker.reportType}</span></div>
+              <div className="span-two" style={{ display: "flex", flexDirection: "column", gap: 4 }}><span className="qr-detail-label">Subject</span><span className="qr-detail-value">{selectedMarker.subject}</span></div>
+              <div className="span-two"><span className="qr-detail-label">Report Details</span><p style={{ margin: "6px 0 0", fontSize: 13, lineHeight: 1.6, color: "var(--ink)" }}>{selectedMarker.details}</p></div>
+            </div>
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, marginTop: 18 }}>
+              <button className="primary-action" style={{ minHeight: 36, padding: "0 14px", fontSize: 11 }} onClick={() => { const m = mapInstanceRef.current; if (m) { m.setView([selectedMarker.lat, selectedMarker.lng], 14, { animate: true }); } setSelectedMarker(null); }}>
+                <span>View on map</span><Icon name="location" size={14} />
+              </button>
+              <button className="secondary-action" style={{ minHeight: 36, padding: "0 14px", fontSize: 11 }} onClick={() => setSelectedMarker(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
