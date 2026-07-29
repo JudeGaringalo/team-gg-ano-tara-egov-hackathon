@@ -882,6 +882,94 @@ input:focus-visible,
   z-index: 2;
 }
 
+.mini-map .leaflet-control-layers {
+  border: 0;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 2px 10px rgba(0,0,0,.12);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink);
+  padding: 4px;
+  min-width: 0;
+}
+
+.mini-map .leaflet-control-layers-toggle {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background-size: 18px 18px;
+}
+
+.mini-map .leaflet-control-layers-expanded {
+  padding: 8px 12px;
+  width: auto;
+}
+
+.mini-map .leaflet-control-layers-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mini-map .leaflet-control-layers label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.mini-map .leaflet-control-layers label:hover {
+  background: #f2f4ee;
+}
+
+.mini-map .leaflet-control-layers input[type="radio"] {
+  accent-color: var(--green, #4caf50);
+  margin: 0;
+  width: 14px;
+  height: 14px;
+}
+
+.mini-map .leaflet-control-zoom {
+  border: 0;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0,0,0,.12);
+  overflow: hidden;
+}
+
+.mini-map .leaflet-control-zoom a {
+  width: 36px;
+  height: 36px;
+  line-height: 36px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink);
+  border: 0;
+  background: #fff;
+}
+
+.mini-map .leaflet-control-zoom a:hover {
+  background: #f2f4ee;
+}
+
+.mini-map .leaflet-control-zoom a.leaflet-disabled {
+  color: #ccc;
+}
+
+.mini-map .leaflet-bar a:first-child {
+  border-bottom: 1px solid #e9ebe5;
+  border-radius: 10px 10px 0 0;
+}
+
+.mini-map .leaflet-bar a:last-child {
+  border-radius: 0 0 10px 10px;
+}
+
 .confirm-modal {
   width: min(440px, 100%);
   padding: clamp(24px, 4vw, 32px);
