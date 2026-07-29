@@ -895,15 +895,23 @@ input:focus-visible,
 }
 
 .mini-map .leaflet-control-layers-toggle {
-  width: 36px;
-  height: 36px;
+  width: 38px;
+  height: 38px;
   border-radius: 8px;
+  border: 0;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0,0,0,.18);
   background-size: 18px 18px;
+  background-position: center;
 }
 
 .mini-map .leaflet-control-layers-expanded {
   padding: 8px 12px;
   width: auto;
+  border-radius: 10px;
+  border: 0;
+  background: #fff;
+  box-shadow: 0 2px 10px rgba(0,0,0,.12);
 }
 
 .mini-map .leaflet-control-layers-list {
@@ -933,6 +941,16 @@ input:focus-visible,
   margin: 0;
   width: 14px;
   height: 14px;
+}
+
+.mini-map .locate-map-btn {
+  position: relative;
+  top: auto;
+  right: auto;
+  z-index: auto;
+  width: 38px;
+  height: 38px;
+  margin-bottom: 4px;
 }
 
 .mini-map .leaflet-control-zoom {

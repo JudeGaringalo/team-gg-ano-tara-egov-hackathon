@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { Center } from "./Trash2CashApp";
@@ -69,14 +69,13 @@ export default function MiniMap({
     const LocateButton = L.Control.extend({
       onAdd: () => {
         const btn = L.DomUtil.create("button", "locate-map-btn leaflet-bar");
-        btn.innerHTML = "📍";
+        btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>';
         btn.title = "Use my location";
         btn.setAttribute("aria-label", "Use my location");
-        btn.style.cssText = "position:relative;top:0;right:0;width:36px;height:36px;border:0;border-radius:8px;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.18);cursor:pointer;font-size:16px;line-height:36px;text-align:center;color:#0057b3;margin-bottom:4px;";
         btn.onclick = () => {
           if (!navigator.geolocation) return;
           btn.disabled = true;
-          btn.innerHTML = "⏳";
+          btn.innerHTML = '<i class="spinner"></i>';
           navigator.geolocation.getCurrentPosition(
             (pos) => {
               const loc: [number, number] = [pos.coords.latitude, pos.coords.longitude];
@@ -84,11 +83,11 @@ export default function MiniMap({
               userMarkerRef.current = L.marker(loc, { icon: userLocationIcon() }).addTo(map);
               map.setView(loc, 14, { animate: true });
               btn.disabled = false;
-              btn.innerHTML = "📍";
+              btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>';
             },
             () => {
               btn.disabled = false;
-              btn.innerHTML = "📍";
+              btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>';
             },
             { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 },
           );
