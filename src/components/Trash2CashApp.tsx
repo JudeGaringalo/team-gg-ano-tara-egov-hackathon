@@ -314,10 +314,10 @@ useEffect(() => {
     await wait(450);
     const profile: CitizenProfile = {
       uniqid: "HACKATHON-CITIZEN-001",
-      first_name: "Lester",
-      last_name: "Garingalo",
-      email: "lesterjudeag@gmail.com",
-      mobile: "+639274542237",
+      first_name: "Jahmell",
+      last_name: "Dorias",
+      email: "jahmelldorias17@gmail.com",
+      mobile: "09274542237",
       birth_date: "1995-12-02",
       gender: "Male",
       region_code: "130000000",
@@ -435,7 +435,12 @@ useEffect(() => {
       heatmap: prevStep ?? "complete",
       dashboard: prevStep ?? "reward",
     };
-    setStep(previous[step] ?? "login");
+    const target = previous[step] ?? "login";
+    if (target === "verify" && qrVerified) {
+      setStep(prevStep ?? "reward");
+    } else {
+      setStep(target);
+    }
   }
 
   async function handleGeneratePayment() {
@@ -551,7 +556,7 @@ useEffect(() => {
       {step !== "heatmap" && step !== "dashboard" && <ProgressBar activeIndex={activeIndex} />}
 
       <main className="workspace">
-        {step !== "dashboard" && (
+        {step !== "dashboard" && step !== "capture" && (
           <div className="workspace-heading">
             <button className="back-button" onClick={goBack}><Icon name="back" size={18} /> Back</button>
             <span>{Math.max(activeIndex + 1, 1).toString().padStart(2, "0")} / 08</span>
@@ -835,7 +840,7 @@ function VerifyScreen({ citizen, onVerified }: { citizen: CitizenProfile | null;
       last_name: citizen?.last_name || "Garingalo",
       birth_date: citizen?.birth_date || "1995-12-02",
       gender: citizen?.gender || "Male",
-      mobile_number: citizen?.mobile_number || citizen?.mobile || "+639274542237",
+      mobile_number: citizen?.mobile_number || citizen?.mobile || "09274542237",
       code: "EVENT-VERIFIED",
     });
   }
@@ -1113,7 +1118,7 @@ function ReportModal({ citizen, transactionId, onClose }: { citizen: CitizenProf
   const [reportType, setReportType] = useState("SERVICE_COMPLAINT");
   const [subject, setSubject] = useState(`Trash2Cash concern · ${transactionId}`);
   const [message, setMessage] = useState("");
-  const [mobile, setMobile] = useState(normalizePhMobile(String(citizen?.mobile_number || citizen?.mobile || "")) || "+639274542237");
+  const [mobile, setMobile] = useState(normalizePhMobile(String(citizen?.mobile_number || citizen?.mobile || "")) || "09274542237");
   const [email, setEmail] = useState(citizen?.email || "");
   const [regionCode, setRegionCode] = useState("040000000");
   const [provinceCode, setProvinceCode] = useState("042100000");
