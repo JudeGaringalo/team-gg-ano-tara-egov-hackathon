@@ -952,14 +952,14 @@ input:focus-visible,
   height: 38px;
 }
 
-.mini-map .leaflet-right .leaflet-top {
+.mini-map .leaflet-top.leaflet-right {
   display: flex;
   flex-direction: row;
   gap: 4px;
   align-items: flex-start;
 }
 
-.mini-map .leaflet-right .leaflet-top .leaflet-control {
+.mini-map .leaflet-top.leaflet-right .leaflet-control {
   margin: 0;
   clear: none;
 }
