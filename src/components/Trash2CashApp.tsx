@@ -589,7 +589,7 @@ function Brand({ dark = false }: { dark?: boolean }) {
       <img
         src={dark ? "/eKalakal Logo - Black.svg" : "/eKalakal Logo - White.svg"}
         alt="eKalakal"
-        height={28}
+        height={34}
         style={{ display: "block" }}
       />
     </div>
