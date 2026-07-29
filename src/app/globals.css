@@ -2693,6 +2693,11 @@ select {
   font-weight: 800;
 }
 
+.report-button:disabled {
+  opacity: .4;
+  cursor: default;
+}
+
 .verification-status-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
