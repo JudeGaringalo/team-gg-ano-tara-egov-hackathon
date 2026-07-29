@@ -10,6 +10,9 @@ import {
 } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import jsQR from "jsqr";
+import dynamic from "next/dynamic";
+
+const MiniMap = dynamic(() => import("./MiniMap"), { ssr: false });
 
 type Step =
   | "login"
@@ -96,7 +99,7 @@ type IconName =
   | "user"
   | "wallet";
 
-type Center = {
+export type Center = {
   id: string;
   name: string;
   address: string;
@@ -104,6 +107,8 @@ type Center = {
   schedule: string;
   queue: string;
   accepts: string;
+  lat: number;
+  lng: number;
 };
 
 const DEFAULT_MATERIAL: MaterialResult = {
@@ -179,6 +184,8 @@ const CENTERS: Center[] = [
     schedule: "Open until 5:00 PM",
     queue: "Low queue",
     accepts: "Plastic, paper, cans",
+    lat: 14.583,
+    lng: 120.982,
   },
   {
     id: "green-cycle",
@@ -188,6 +195,8 @@ const CENTERS: Center[] = [
     schedule: "Open until 6:00 PM",
     queue: "Moderate queue",
     accepts: "Plastic, cardboard, metal",
+    lat: 14.605,
+    lng: 121.004,
   },
   {
     id: "city-mrf",
@@ -197,6 +206,8 @@ const CENTERS: Center[] = [
     schedule: "Open until 4:30 PM",
     queue: "Low queue",
     accepts: "Plastic, paper, e-waste",
+    lat: 14.618,
+    lng: 120.973,
   },
 ];
 
@@ -883,6 +894,7 @@ function CenterScreen({ material, selected, onSelect, onContinue }: { material: 
       description="Select an accredited Barangay MRF or partner junkshop. The attendant will inspect, weigh, and confirm the final reward."
       aside={<TransactionAside material={material} center={center.name} weight={`${material.estimatedWeight.toFixed(1)} kg estimated`} reward={`${formatMoney(material.estimatedWeight * material.cashRate)} estimated`} />}
     >
+      <MiniMap centers={CENTERS} selected={selected} onSelect={onSelect} />
       <div className="center-list">
         {CENTERS.map((item) => (
           <button key={item.id} className={selected === item.id ? "center-card selected" : "center-card"} onClick={() => onSelect(item.id)}>
