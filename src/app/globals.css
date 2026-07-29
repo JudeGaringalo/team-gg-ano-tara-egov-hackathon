@@ -863,6 +863,102 @@ input:focus-visible,
   text-align: right;
 }
 
+.mini-map {
+  position: relative;
+  overflow: hidden;
+  height: 340px;
+  margin-bottom: 24px;
+  border: 1px solid var(--line);
+  border-radius: 23px;
+  box-shadow: 0 18px 48px rgba(24, 27, 22, 0.07);
+}
+
+.mini-map .leaflet-pane {
+  z-index: 1;
+}
+
+.mini-map .leaflet-top,
+.mini-map .leaflet-bottom {
+  z-index: 2;
+}
+
+.confirm-modal {
+  width: min(440px, 100%);
+  padding: clamp(24px, 4vw, 32px);
+  border-radius: 24px;
+  background: #f8f9f4;
+  box-shadow: 0 40px 100px rgba(0, 0, 0, 0.32);
+}
+
+.confirm-modal-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.confirm-modal-icon {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: #e8f5e9;
+}
+
+.confirm-modal h2 {
+  margin: 0;
+  font-size: clamp(20px, 3vw, 26px);
+  letter-spacing: -0.04em;
+}
+
+.confirm-modal-body p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.confirm-address {
+  margin-bottom: 14px;
+}
+
+.confirm-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 14px 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.confirm-meta span {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.confirm-meta strong {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.confirm-question {
+  margin-top: 0;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.confirm-modal .modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
 .action-row {
   display: flex;
   justify-content: flex-end;
@@ -2062,6 +2158,10 @@ input:focus-visible,
     display: none;
   }
 
+  .mini-map {
+    display: none;
+  }
+
   .screen-main > h1 {
     font-size: clamp(41px, 8vw, 64px);
   }
@@ -2839,7 +2939,8 @@ select {
     padding: 0;
   }
 
-  .report-modal {
+  .report-modal,
+  .confirm-modal {
     max-height: 92svh;
     border-radius: 24px 24px 0 0;
   }
