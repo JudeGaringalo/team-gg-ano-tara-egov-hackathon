@@ -278,13 +278,17 @@ export default function Trash2CashApp() {
   const [reportOpen, setReportOpen] = useState(false);
   const [qrVerified, setQrVerified] = useState(false);
   const [heatmapFilter, setHeatmapFilter] = useState<"all" | "pending" | "cleared">("all");
+  const [egovPayUuid, setEgovPayUuid] = useState("");
+  const [egovPayUrl, setEgovPayUrl] = useState("");
+  const [egovPayTxnData, setEgovPayTxnData] = useState<Record<string, unknown> | null>(null);
+  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [paymentError, setPaymentError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
   const selectedCenterData = CENTERS.find((center) => center.id === selectedCenter) ?? CENTERS[0];
   const finalCash = actualWeight * material.cashRate;
   const finalPoints = Math.round(actualWeight * material.pointRate);
   const transactionId = "T2C-A7F392";
-  const qrPayload = JSON.stringify({ transactionId, wallet, amount: finalCash.toFixed(2), currency: "PHP" });
 
   const normalizedStep = step === "paymentQr" || step === "points" ? "wallet" : step;
   const activeIndex = useMemo(() => FLOW_STEPS.findIndex((item) => item.key === normalizedStep), [normalizedStep]);
@@ -433,6 +437,61 @@ useEffect(() => {
     setStep(previous[step] ?? "login");
   }
 
+  async function handleGeneratePayment() {
+    setPaymentLoading(true);
+    setPaymentError("");
+    try {
+      const response = await fetch("/api/egovpay/collection", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: finalCash,
+          txnid: transactionId,
+          redirectUrl: window.location.origin,
+          callbackUrl: `${window.location.origin}/api/egovpay/callback`,
+          mobile: citizen?.mobile || citizen?.mobile_number || "",
+          email: citizen?.email || "",
+          name: displayName,
+        }),
+      });
+      const payload = await response.json() as { transaction?: { uuid?: string; url?: string }; error?: string };
+      if (!response.ok) throw new Error(payload.error || "Payment generation failed");
+      if (!payload.transaction?.uuid || !payload.transaction?.url) throw new Error("Invalid payment response");
+      setEgovPayUuid(payload.transaction.uuid);
+      setEgovPayUrl(payload.transaction.url);
+    } catch (err) {
+      setPaymentError(err instanceof Error ? err.message : "Unable to process payment");
+    } finally {
+      setPaymentLoading(false);
+    }
+  }
+
+  async function handleConfirmPayment() {
+    setPaymentLoading(true);
+    setPaymentError("");
+    try {
+      const response = await fetch("/api/egovpay/status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uuid: egovPayUuid }),
+      });
+      const payload = await response.json() as { transaction?: Record<string, unknown>; error?: string };
+      if (!response.ok) throw new Error(payload.error || "Status check failed");
+      setEgovPayTxnData(payload.transaction ?? null);
+      setStep("complete");
+    } catch (err) {
+      setPaymentError(err instanceof Error ? err.message : "Unable to verify transaction");
+    } finally {
+      setPaymentLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (step === "paymentQr" && !egovPayUrl) {
+      void handleGeneratePayment();
+    }
+  }, [step]);
+
   const displayName = [citizen?.first_name, citizen?.last_name].filter(Boolean).join(" ") || "Citizen";
   const initials = displayName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
 
@@ -450,12 +509,6 @@ useEffect(() => {
               <span className="overline light">Verified recycling rewards</span>
               <h1>TURN WASTE<br />INTO <em>VALUE.</em></h1>
               <p>Identify recyclable materials, validate them at an accredited collection center, and receive cash or Green Points through one secure flow.</p>
-            </div>
-            <div className="story-visual" aria-hidden="true">
-              <div className="metal-ring"><Icon name="recycle" size={112} /></div>
-              <span className="orbit-label label-one">AI assessment</span>
-              <span className="orbit-label label-two">Verified drop-off</span>
-              <span className="orbit-label label-three">Secure reward</span>
             </div>
             <div className="story-footer">
               <span>National ID e-Verify</span><span>Face Liveness</span><span>eGov AI</span><span>eReport</span><span>eGovPay</span><span>eMessage</span>
@@ -511,10 +564,10 @@ useEffect(() => {
         {step === "validation" && <ValidationScreen material={material} center={selectedCenterData} weight={actualWeight} setWeight={setActualWeight} cash={finalCash} points={finalPoints} onContinue={() => setStep("reward")} />}
         {step === "reward" && <RewardScreen type={rewardType} setType={setRewardType} cash={finalCash} points={finalPoints} onContinue={() => setStep(rewardType === "cash" ? "wallet" : "points")} />}
         {step === "wallet" && <WalletScreen wallet={wallet} setWallet={setWallet} account={account} setAccount={setAccount} cash={finalCash} onContinue={() => setStep("paymentQr")} />}
-        {step === "paymentQr" && <PaymentQrScreen material={material} wallet={wallet} cash={finalCash} transactionId={transactionId} payload={qrPayload} onContinue={() => setStep("complete")} />}
+        {step === "paymentQr" && <PaymentQrScreen material={material} wallet={wallet} cash={finalCash} transactionId={transactionId} egovPayUrl={egovPayUrl} paymentLoading={paymentLoading} paymentError={paymentError} onConfirm={handleConfirmPayment} />}
         {step === "points" && <PointsScreen points={finalPoints} onContinue={() => setStep("complete")} />}
         {step === "dashboard" && <DashboardScreen citizen={citizen} displayName={displayName} initials={initials} onBack={() => setStep("reward")} onLogout={logout} />}
-        {step === "complete" && <CompleteScreen citizen={citizen} material={material} rewardType={rewardType} wallet={wallet} cash={finalCash} points={finalPoints} weight={actualWeight} center={selectedCenterData} transactionId={transactionId} onRestart={restart} />}
+        {step === "complete" && <CompleteScreen citizen={citizen} material={material} rewardType={rewardType} wallet={wallet} cash={finalCash} points={finalPoints} weight={actualWeight} center={selectedCenterData} transactionId={transactionId} egovPayTxnData={egovPayTxnData} onRestart={restart} />}
         {step === "heatmap" && (
           <section className="heatmap-page">
             <span className="overline">Spatial Waste Intelligence</span>
@@ -967,19 +1020,20 @@ function WalletScreen({ wallet, setWallet, account, setAccount, cash, onContinue
   );
 }
 
-function PaymentQrScreen({ material, wallet, cash, transactionId, payload, onContinue }: { material: MaterialResult; wallet: Wallet; cash: number; transactionId: string; payload: string; onContinue: () => void }) {
+function PaymentQrScreen({ material, wallet, cash, transactionId, egovPayUrl, paymentLoading, paymentError, onConfirm }: { material: MaterialResult; wallet: Wallet; cash: number; transactionId: string; egovPayUrl: string; paymentLoading: boolean; paymentError: string; onConfirm: () => void }) {
   return (
     <Screen
       eyebrow="Payment partner"
       title={`${wallet} claim QR is ready.`}
-      description="Scan or present this payment-partner QR to complete the reward claim."
+      description={paymentLoading ? "Generating payment link via eGovPay…" : "Scan or present this payment-partner QR to complete the reward claim."}
       aside={<TransactionAside material={material} center="Validated drop-off" weight={`${material.estimatedWeight.toFixed(1)} kg`} reward={`${formatMoney(cash)} via ${wallet}`} />}
     >
       <div className="qr-section">
-        <div className="qr-card"><div className="qr-provider"><span className={`wallet-mark ${wallet === "GCash" ? "g" : wallet === "Maya" ? "m" : "b"}`}>{wallet.charAt(0)}</span><div><h3>{wallet}</h3><small>Payment partner</small></div></div><div className="qr-code"><QRCodeSVG value={payload} size={220} level="M" includeMargin /></div><div className="qr-value"><small>Reward amount</small><strong>{formatMoney(cash)}</strong><span>{transactionId}</span></div></div>
+        <div className="qr-card"><div className="qr-provider"><span className={`wallet-mark ${wallet === "GCash" ? "g" : wallet === "Maya" ? "m" : "b"}`}>{wallet.charAt(0)}</span><div><h3>{wallet}</h3><small>Payment partner</small></div></div><div className="qr-code">{egovPayUrl ? <QRCodeSVG value={egovPayUrl} size={220} level="M" includeMargin /> : <div className="qr-placeholder"><i className="spinner" /></div>}</div><div className="qr-value"><small>Reward amount</small><strong>{formatMoney(cash)}</strong><span>{transactionId}</span></div></div>
         <div className="claim-steps"><span className="overline">How to claim</span><ol><li><b>01</b><p>Open your selected payment channel.</p></li><li><b>02</b><p>Scan or present the claim QR code.</p></li><li><b>03</b><p>Confirm that the reward was received.</p></li></ol></div>
       </div>
-      <div className="action-row"><button className="primary-action" onClick={onContinue}><span>Confirm reward received</span><Icon name="check" /></button></div>
+      {paymentError && <div className="provider-error">{paymentError}</div>}
+      <div className="action-row"><button className="primary-action" disabled={!egovPayUrl || paymentLoading} onClick={onConfirm}><span>{paymentLoading ? "Processing…" : "Confirm reward received"}</span><Icon name="check" /></button></div>
     </Screen>
   );
 }
@@ -999,7 +1053,7 @@ function PointsScreen({ points, onContinue }: { points: number; onContinue: () =
   );
 }
 
-function CompleteScreen({ citizen, material, rewardType, wallet, cash, points, weight, center, transactionId, onRestart }: { citizen: CitizenProfile | null; material: MaterialResult; rewardType: RewardType; wallet: Wallet; cash: number; points: number; weight: number; center: Center; transactionId: string; onRestart: () => void }) {
+function CompleteScreen({ citizen, material, rewardType, wallet, cash, points, weight, center, transactionId, egovPayTxnData, onRestart }: { citizen: CitizenProfile | null; material: MaterialResult; rewardType: RewardType; wallet: Wallet; cash: number; points: number; weight: number; center: Center; transactionId: string; egovPayTxnData?: Record<string, unknown> | null; onRestart: () => void }) {
   const [messageState, setMessageState] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [messageText, setMessageText] = useState("");
   const mobile = normalizePhMobile(String(citizen?.mobile_number || citizen?.mobile || ""));
@@ -1034,10 +1088,10 @@ function CompleteScreen({ citizen, material, rewardType, wallet, cash, points, w
       eyebrow="Transaction completed"
       title="Your recycling reward has been issued."
       description="The materials were validated and the reward flow was completed. Send the citizen a transaction confirmation through e-Message."
-      aside={<InfoAside icon="check" title="Verified completion" text="This transaction is now recorded as completed and cannot be claimed again." tags={[transactionId, "Completed"]} />}
+      aside={<InfoAside icon="check" title="Verified completion" text="This transaction is now recorded as completed and cannot be claimed again." tags={[transactionId, `eGovPay: ${(egovPayTxnData?.refno as string) || egovPayTxnData?.uuid as string || "Pending"}`, "Completed"]} />}
     >
       <div className="complete-banner"><span><Icon name="check" size={36} /></span><div><small>Reward issued</small><h3>{rewardType === "cash" ? `${formatMoney(cash)} through ${wallet}` : `${points} Green Points credited`}</h3><p>Thank you for helping divert recyclable waste from landfill.</p></div></div>
-      <div className="receipt"><div className="receipt-head"><span>TRASH2CASH RECEIPT</span><strong>{transactionId}</strong></div><ReceiptLine label="Material" value={material.name} /><ReceiptLine label="Validated weight" value={`${weight.toFixed(1)} kg`} /><ReceiptLine label="Collection center" value={center.name} /><ReceiptLine label="Reward" value={rewardType === "cash" ? `${formatMoney(cash)} · ${wallet}` : `${points} Green Points`} /><ReceiptLine label="Status" value="Completed" /></div>
+      <div className="receipt"><div className="receipt-head"><span>TRASH2CASH RECEIPT</span><strong>{transactionId}</strong></div><ReceiptLine label="Material" value={material.name} /><ReceiptLine label="Validated weight" value={`${weight.toFixed(1)} kg`} /><ReceiptLine label="Collection center" value={center.name} /><ReceiptLine label="Reward" value={rewardType === "cash" ? `${formatMoney(cash)} · ${wallet}` : `${points} Green Points`} />{egovPayTxnData?.refno ? <ReceiptLine label="eGovPay Ref No." value={egovPayTxnData.refno as string} /> : null}{egovPayTxnData?.payment_status ? <ReceiptLine label="Payment status" value={egovPayTxnData.payment_status as string} /> : null}<ReceiptLine label="Status" value="Completed" /></div>
 
       <div className="message-panel">
         <div><span className="overline">e-Message</span><h3>Send transaction confirmation</h3><p>{mobile ? `The SMS will be sent to ${mobile}.` : "No valid mobile number is available in the citizen profile."}</p></div>

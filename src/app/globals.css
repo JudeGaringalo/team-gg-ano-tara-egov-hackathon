@@ -1837,6 +1837,27 @@ input:focus-visible,
   background: #fff;
 }
 
+.qr-placeholder {
+  display: grid;
+  width: 220px;
+  height: 220px;
+  place-items: center;
+}
+
+i.spinner {
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  border: 2.5px solid #d7dbd1;
+  border-top-color: var(--ink);
+  border-radius: 50%;
+  animation: spin .6s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 .qr-value {
   display: flex;
   align-items: center;
