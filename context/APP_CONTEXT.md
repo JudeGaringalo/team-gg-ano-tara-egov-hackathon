@@ -13,7 +13,7 @@ src/
 ├── app/
 │   ├── layout.tsx               Root HTML shell + metadata
 │   ├── page.tsx                 Entry point — renders Trash2CashApp
-│   ├── globals.css              ~2838 lines of plain CSS
+│   ├── globals.css              ~3987 lines of plain CSS
 │   └── api/                     Server-side route handlers
 │       ├── ai-estimate/route.ts         POST — Mock material estimate
 │       ├── validate/route.ts            POST — Mock weight validation + reward calc
@@ -30,7 +30,7 @@ src/
 │       ├── liveness/result/route.ts     POST — Get Face Liveness result
 │       └── egovpay/status/route.ts      POST — eGovPay transaction lookup
 ├── components/
-│   └── Trash2CashApp.tsx        Single 1120-line SPA component
+│   └── Trash2CashApp.tsx        Single 1895-line SPA component
 └── lib/
     ├── provider-http.ts         Shared HTTP utilities
     ├── everify.ts               National ID e-Verify API wrapper
@@ -59,7 +59,7 @@ src/
 
 ---
 
-## User Flow (11 Steps)
+## User Flow (13 Steps)
 
 | Step | Purpose |
 |------|---------|
@@ -74,12 +74,14 @@ src/
 | `paymentQr` | QR code display for partner payout claim |
 | `points` | Green Points credit confirmation |
 | `complete` | Receipt, SMS confirmation, report issue, restart |
+| `heatmap` | Community waste heatmap with Leaflet map |
+| `dashboard` | Citizen profile, balance, impact metrics, transaction history |
 
 ---
 
 ## Component Architecture
 
-`src/components/Trash2CashApp.tsx` is a single `"use client"` component (~1120 lines) containing all sub-components inline:
+`src/components/Trash2CashApp.tsx` is a single `"use client"` component (~1895 lines) containing all sub-components inline:
 
 | Sub-component | Purpose |
 |---|---|
@@ -99,8 +101,10 @@ src/
 | `PaymentQrScreen` | QR code via `qrcode.react` |
 | `PointsScreen` | Green Points confirmation |
 | `CompleteScreen` | Receipt + SMS + report + restart |
-| `AccountMenu` | Dropdown after eVerify (Points/Withdraw, Txn history, Sign out) |
-| `ReportModal` | eReport complaint form with location codes |
+| `DashboardScreen` | Citizen profile, wallet balance, environmental impact, transaction history with pagination + date filters |
+| `WithdrawFlow` | Multi-step withdrawal flow (center → wallet → QR → receipt → complete) |
+| `HeatmapContent` | Leaflet-based community waste heatmap with filter tabs, marker detail modals, and geolocation locate button |
+| `ReportModal` | eReport complaint form with location codes and evidence upload |
 | `InfoAside` | Dark info card sidebar |
 | `TransactionAside` | Transaction summary sidebar |
 | `Metric` | Single metric display |
@@ -133,6 +137,7 @@ src/
 | `/api/egov-ai/credits` | GET | `egov-ai` | Remaining AI credits |
 | `/api/emessage/send` | POST | `emessage` | Send SMS confirmation |
 | `/api/ereport/submit` | POST | `ereport` | Submit complaint report |
+| `/api/egovpay/collection` | POST | `egovpay` | Generate payment partner claim QR |
 | `/api/egovpay/status` | POST | `egovpay` | Lookup eGovPay transaction |
 
 ---
@@ -179,7 +184,7 @@ All read from `process.env` (`.env.local` at project root):
 
 ## Styling Conventions
 
-- **File**: `src/app/globals.css` (~2838 lines, plain CSS)
+- **File**: `src/app/globals.css` (~3987 lines, plain CSS)
 - **No Tailwind, no CSS-in-JS, no CSS modules**
 - Naming: kebab-case BEM-like (`.login-page`, `.login-grid`, `.login-panel`, `.primary-action`, etc.)
 - Color scheme defined via `:root` CSS custom properties
@@ -195,7 +200,7 @@ All read from `process.env` (`.env.local` at project root):
 - Citizen profile persisted in `sessionStorage` under key `trash2cash-citizen`
 - Mock routes provide deterministic fallbacks when real providers are unavailable
 - All verification steps have event-test paths for hackathon demo continuity
-- Avatar shows placeholder (`—` / `Citizen`) until QR Verify succeeds, then displays real name + dropdown menu
+- Avatar navigates to dashboard/profile page after QR verification succeeds
 
 ---
 

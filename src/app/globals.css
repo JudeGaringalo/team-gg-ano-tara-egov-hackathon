@@ -2942,6 +2942,49 @@ select {
   box-shadow: 0 3px 14px rgba(17, 18, 15, .08);
 }
 
+.locate-map-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0,0,0,.18);
+  cursor: pointer;
+  color: #0057b3;
+}
+.locate-map-btn:disabled {
+  opacity: .6;
+  cursor: default;
+}
+.locate-map-btn:hover:not(:disabled) {
+  background: #f2f4ee;
+}
+
+.user-location-marker {
+  background: none !important;
+  border: 0 !important;
+}
+.user-location-pulse {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #0066ff;
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 2px #0066ff, 0 2px 6px rgba(0,0,0,.3);
+  animation: user-loc-pulse 1.8s ease-in-out infinite;
+}
+@keyframes user-loc-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px #0066ff, 0 2px 6px rgba(0,0,0,.3); }
+  50% { box-shadow: 0 0 0 2px #0066ff, 0 0 0 8px rgba(0,102,255,.15), 0 2px 6px rgba(0,0,0,.3); }
+}
+
 .heatmap-map-wrap {
   position: relative;
   z-index: 1;
@@ -3118,6 +3161,8 @@ select {
   color: var(--muted);
   font-size: 12px;
   text-align: center;
+}
+
 /* Dashboard */
 .dashboard-screen {
   max-width: 780px;

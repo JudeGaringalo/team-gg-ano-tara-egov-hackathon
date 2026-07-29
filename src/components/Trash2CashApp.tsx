@@ -23,7 +23,7 @@ type Step =
   | "paymentQr"
   | "points"
   | "complete"
-  | "heatmap";
+  | "heatmap"
   | "dashboard";
 
 type RewardType = "cash" | "points";
@@ -266,7 +266,6 @@ export default function Trash2CashApp() {
   const [toast, setToast] = useState<string | null>(null);
   const [reportOpen, setReportOpen] = useState(false);
   const [qrVerified, setQrVerified] = useState(false);
-  const [accountOpen, setAccountOpen] = useState(false);
   const [heatmapFilter, setHeatmapFilter] = useState<"all" | "pending" | "cleared">("all");
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -479,39 +478,12 @@ useEffect(() => {
           <button className="report-button" onClick={() => setStep("heatmap")}>Waste Heatmap</button>
           <button className="report-button" onClick={() => setReportOpen(true)}>Report issue</button>
           <div className="account-dropdown-wrap">
-            <button className="account-button" onClick={() => qrVerified && setAccountOpen(v => !v)}><span>{step === "verify" && !qrVerified ? "—" : initials}</span><div><strong>{step === "verify" && !qrVerified ? "Citizen" : displayName}</strong><small>{step === "verify" ? (qrVerified ? "Verified citizen" : "Citizen session") : "Verified citizen"}</small></div></button>
-            {accountOpen && (
-              <>
-                <div className="dropdown-backdrop" onClick={() => setAccountOpen(false)} />
-                <div className="account-dropdown">
-                  <div className="account-dropdown-head">
-                    <span>{initials}</span>
-                    <div>
-                      <strong>{displayName}</strong>
-<small>Verified citizen</small>
-                    </div>
-                  </div>
-                  <div className="account-dropdown-body">
-                    <div className="dropdown-mobile-nav">
-                      <button className="account-dropdown-option" onClick={() => setAccountOpen(false)}><span className="option-icon">●</span>Recycling transaction <strong style={{fontWeight:600}}>{transactionId}</strong></button>
-                      <button className="account-dropdown-option" onClick={() => { setAccountOpen(false); setStep("heatmap"); }}><span className="option-icon">●</span>Waste Heatmap</button>
-                      <button className="account-dropdown-option" onClick={() => { setAccountOpen(false); setReportOpen(true); }}><span className="option-icon">●</span>Report issue</button>
-                      <hr className="dropdown-mobile-sep" />
-                    </div>
-                    <button className="account-dropdown-option" onClick={() => setAccountOpen(false)}><span className="option-icon">●</span>Points / Withdraw</button>
-                    <button className="account-dropdown-option" onClick={() => setAccountOpen(false)}><span className="option-icon">●</span>Transaction history</button>
-                    <button className="account-dropdown-option logout" onClick={() => { setAccountOpen(false); logout(); }}><span className="option-icon">●</span>Sign out</button>
-                  </div>
-                </div>
-              </>
-            )}
-            <button className="account-button" onClick={() => { if (qrVerified) setStep("dashboard"); }}><span>{step === "verify" && !qrVerified ? "—" : initials}</span><div><strong>{step === "verify" && !qrVerified ? "Citizen" : displayName}</strong><small>{step === "verify" ? (qrVerified ? "Verified citizen" : "Citizen session") : "Verified citizen"}</small></div></button>
+                      <button className="account-button" onClick={() => { if (qrVerified) setStep("dashboard"); }}><span>{step === "verify" && !qrVerified ? "—" : initials}</span><div><strong>{step === "verify" && !qrVerified ? "Citizen" : displayName}</strong><small>{step === "verify" ? (qrVerified ? "Verified citizen" : "Citizen session") : "Verified citizen"}</small></div></button>
           </div>
         </div>
       </header>
 
-      {step !== "heatmap" && <ProgressBar activeIndex={activeIndex} />}
-      {step !== "dashboard" && <ProgressBar activeIndex={activeIndex} />}
+      {step !== "heatmap" && step !== "dashboard" && <ProgressBar activeIndex={activeIndex} />}
 
       <main className="workspace">
         {step !== "dashboard" && (
@@ -1195,8 +1167,12 @@ function HeatmapContent({ filter, onFilterChange }: { filter: "all" | "pending" 
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
   const circlesRef = useRef<any[]>([]);
+  const userMarkerRef = useRef<any>(null);
   const loadedRef = useRef(false);
   const [selectedMarker, setSelectedMarker] = useState<typeof HEATMAP_MARKERS[number] | null>(null);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [locateError, setLocateError] = useState("");
 
   const HEATMAP_MARKERS = [
     { id: "1", lat: 14.62, lng: 120.98, location: "Barangay San Antonio, QC", time: "2h ago", category: "Mixed Waste", status: "pending" as const, density: "critical" as const, reportType: "Environmental Violation", subject: "Uncollected waste blocking drainage", details: "Mixed waste has been accumulating for over a week, blocking the drainage canal along Magsaysay Street. Strong odor and stray animals reported in the area.", evidences: [] as string[] },
@@ -1273,6 +1249,9 @@ function HeatmapContent({ filter, onFilterChange }: { filter: "all" | "pending" 
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
       }
+      if (userMarkerRef.current) {
+        userMarkerRef.current = null;
+      }
     };
   }, []);
 
@@ -1314,6 +1293,58 @@ function HeatmapContent({ filter, onFilterChange }: { filter: "all" | "pending" 
     syncCircles(filter);
   }, [filter]);
 
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map || !window.L || !userLocation) return;
+    const L = window.L;
+    if (userMarkerRef.current) {
+      map.removeLayer(userMarkerRef.current);
+    }
+    const icon = L.divIcon({
+      className: "user-location-marker",
+      html: '<div class="user-location-pulse"></div>',
+      iconSize: [24, 24],
+      iconAnchor: [12, 12],
+    });
+    userMarkerRef.current = L.marker([userLocation.lat, userLocation.lng], { icon }).addTo(map);
+    return () => {
+      if (userMarkerRef.current) {
+        map.removeLayer(userMarkerRef.current);
+        userMarkerRef.current = null;
+      }
+    };
+  }, [userLocation]);
+
+  function getUserLocation() {
+    setLocateError("");
+    if (!navigator.geolocation) {
+      setLocateError("Geolocation is not supported by this browser.");
+      return;
+    }
+    setLocationLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const loc = { lat: position.coords.latitude, lng: position.coords.longitude };
+        setUserLocation(loc);
+        setLocationLoading(false);
+        const map = mapInstanceRef.current;
+        if (map) {
+          map.setView([loc.lat, loc.lng], 14, { animate: true });
+        }
+      },
+      (error) => {
+        setLocationLoading(false);
+        const messages: Record<number, string> = {
+          1: "Location access was denied. Enable location permissions in your browser settings.",
+          2: "Location information is unavailable. Try again.",
+          3: "Location request timed out. Try again.",
+        };
+        setLocateError(messages[error.code] || "Could not retrieve your location.");
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 },
+    );
+  }
+
   return (
     <div className="heatmap-content">
       <div className="heatmap-tabs">
@@ -1321,9 +1352,13 @@ function HeatmapContent({ filter, onFilterChange }: { filter: "all" | "pending" 
         <button className={filter === "pending" ? "active" : ""} onClick={() => onFilterChange("pending")}>Pending LGU Dispatch</button>
         <button className={filter === "cleared" ? "active" : ""} onClick={() => onFilterChange("cleared")}>Cleared Areas</button>
       </div>
+      {locateError && <div className="provider-error" style={{ marginBottom: 12 }}>{locateError}</div>}
 
       <div className="heatmap-map-wrap">
         <div ref={mapRef} className="heatmap-map" />
+        <button className="locate-map-btn" disabled={locationLoading} onClick={getUserLocation}>
+          {locationLoading ? <i className="spinner" /> : <Icon name="location" size={16} />}
+        </button>
         <div className="heatmap-legend">
           <span className="overline">Density</span>
           <div className="heatmap-legend-item"><span className="legend-dot" style={{ background: "#32815c" }} /> Low</div>
