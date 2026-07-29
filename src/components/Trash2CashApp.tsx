@@ -586,8 +586,12 @@ useEffect(() => {
 function Brand({ dark = false }: { dark?: boolean }) {
   return (
     <div className={dark ? "brand dark" : "brand"}>
-      <span className="brand-mark"><Icon name="recycle" size={23} /></span>
-      <strong>TRASH2CASH</strong>
+      <img
+        src={dark ? "/eKalakal Logo - Black.svg" : "/eKalakal Logo - White.svg"}
+        alt="eKalakal"
+        height={28}
+        style={{ display: "block" }}
+      />
     </div>
   );
 }
