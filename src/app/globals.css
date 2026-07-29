@@ -950,7 +950,18 @@ input:focus-visible,
   z-index: auto;
   width: 38px;
   height: 38px;
-  margin-bottom: 4px;
+}
+
+.mini-map .leaflet-right .leaflet-top {
+  display: flex;
+  flex-direction: row;
+  gap: 4px;
+  align-items: flex-start;
+}
+
+.mini-map .leaflet-right .leaflet-top .leaflet-control {
+  margin: 0;
+  clear: none;
 }
 
 .mini-map .leaflet-control-zoom {
