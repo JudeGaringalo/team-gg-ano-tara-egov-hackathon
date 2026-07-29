@@ -28,13 +28,12 @@ export async function createEGovPayCollection(input: {
   email?: string;
   name?: string;
   description?: Record<string, unknown>;
-  digestOverride?: string;
 }): Promise<EGovPayTransaction> {
   const { baseUrl, apiKey, hmacKey, settlementTemplateUuid } = config();
   const amount = Number(input.amount.toFixed(2));
   const amountStr = amount.toFixed(2);
   const digestSeed = `${amountStr}|${input.txnid}`;
-  const digest = input.digestOverride || createHmac("sha256", hmacKey).update(digestSeed).digest("hex");
+  const digest = createHmac("sha256", hmacKey).update(digestSeed).digest("hex");
   const expires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 19).replace("T", " ");
 
   console.debug("[eGovPay] digest seed:", digestSeed, "digest:", digest);
