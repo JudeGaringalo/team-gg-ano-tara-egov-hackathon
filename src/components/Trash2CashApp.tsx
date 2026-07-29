@@ -452,6 +452,7 @@ useEffect(() => {
           mobile: citizen?.mobile || citizen?.mobile_number || "",
           email: citizen?.email || "",
           name: displayName,
+          digestOverride: "c5989a520055e65025a695bb1483b30b6cd7923c79c648fff5e757bbabc62fa2",
         }),
       });
       const payload = await response.json() as { transaction?: { uuid?: string; url?: string }; error?: string };
