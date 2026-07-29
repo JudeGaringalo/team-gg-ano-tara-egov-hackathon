@@ -277,6 +277,7 @@ export default function Trash2CashApp() {
   const [toast, setToast] = useState<string | null>(null);
   const [reportOpen, setReportOpen] = useState(false);
   const [qrVerified, setQrVerified] = useState(false);
+  const [prevStep, setPrevStep] = useState<Step | null>(null);
   const [heatmapFilter, setHeatmapFilter] = useState<"all" | "pending" | "cleared">("all");
   const [egovPayUuid, setEgovPayUuid] = useState("");
   const [egovPayUrl, setEgovPayUrl] = useState("");
@@ -431,8 +432,8 @@ useEffect(() => {
       paymentQr: "wallet",
       points: "reward",
       complete: rewardType === "cash" ? "paymentQr" : "points",
-      heatmap: "complete",
-      dashboard: "reward",
+      heatmap: prevStep ?? "complete",
+      dashboard: prevStep ?? "reward",
     };
     setStep(previous[step] ?? "login");
   }
@@ -539,10 +540,10 @@ useEffect(() => {
         <Brand dark />
         <div className="header-actions">
           <span className="header-txn">Recycling transaction <strong>{transactionId}</strong></span>
-          <button className="report-button" disabled={!qrVerified} onClick={() => setStep("heatmap")}>Waste Heatmap</button>
+          <button className="report-button" disabled={!qrVerified} onClick={() => { setPrevStep(step); setStep("heatmap"); }}>Waste Heatmap</button>
           <button className="report-button" disabled={!qrVerified} onClick={() => setReportOpen(true)}>Report issue</button>
           <div className="account-dropdown-wrap">
-                      <button className="account-button" onClick={() => { if (qrVerified) setStep("dashboard"); }}><span>{step === "verify" && !qrVerified ? "—" : initials}</span><div><strong>{step === "verify" && !qrVerified ? "Citizen" : displayName}</strong><small>{step === "verify" ? (qrVerified ? "Verified citizen" : "Citizen session") : "Verified citizen"}</small></div></button>
+                      <button className="account-button" onClick={() => { if (qrVerified) { setPrevStep(step); setStep("dashboard"); } }}><span>{step === "verify" && !qrVerified ? "—" : initials}</span><div><strong>{step === "verify" && !qrVerified ? "Citizen" : displayName}</strong><small>{step === "verify" ? (qrVerified ? "Verified citizen" : "Citizen session") : "Verified citizen"}</small></div></button>
           </div>
         </div>
       </header>
@@ -566,7 +567,7 @@ useEffect(() => {
         {step === "wallet" && <WalletScreen wallet={wallet} setWallet={setWallet} account={account} setAccount={setAccount} cash={finalCash} onContinue={() => setStep("paymentQr")} />}
         {step === "paymentQr" && <PaymentQrScreen material={material} wallet={wallet} cash={finalCash} transactionId={transactionId} egovPayUrl={egovPayUrl} paymentLoading={paymentLoading} paymentError={paymentError} onConfirm={handleConfirmPayment} />}
         {step === "points" && <PointsScreen points={finalPoints} onContinue={() => setStep("complete")} />}
-        {step === "dashboard" && <DashboardScreen citizen={citizen} displayName={displayName} initials={initials} onBack={() => setStep("reward")} onLogout={logout} />}
+        {step === "dashboard" && <DashboardScreen citizen={citizen} displayName={displayName} initials={initials} onBack={() => setStep(prevStep ?? "reward")} onLogout={logout} />}
         {step === "complete" && <CompleteScreen citizen={citizen} material={material} rewardType={rewardType} wallet={wallet} cash={finalCash} points={finalPoints} weight={actualWeight} center={selectedCenterData} transactionId={transactionId} egovPayTxnData={egovPayTxnData} onRestart={restart} />}
         {step === "heatmap" && (
           <section className="heatmap-page">
