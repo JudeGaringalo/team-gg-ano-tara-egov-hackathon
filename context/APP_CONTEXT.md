@@ -13,7 +13,7 @@ src/
 ├── app/
 │   ├── layout.tsx               Root HTML shell + metadata
 │   ├── page.tsx                 Entry point — renders Trash2CashApp
-│   ├── globals.css              ~3987 lines of plain CSS
+│   ├── globals.css              ~4294 lines of plain CSS
 │   └── api/                     Server-side route handlers
 │       ├── ai-estimate/route.ts         POST — Mock material estimate
 │       ├── validate/route.ts            POST — Mock weight validation + reward calc
@@ -30,7 +30,8 @@ src/
 │       ├── liveness/result/route.ts     POST — Get Face Liveness result
 │       └── egovpay/status/route.ts      POST — eGovPay transaction lookup
 ├── components/
-│   └── Trash2CashApp.tsx        Single 1895-line SPA component
+│   ├── MiniMap.tsx              Leaflet map with center markers, layer toggle, and geolocation
+│   └── Trash2CashApp.tsx        Single 2044-line SPA component
 └── lib/
     ├── provider-http.ts         Shared HTTP utilities
     ├── everify.ts               National ID e-Verify API wrapper
@@ -81,7 +82,7 @@ src/
 
 ## Component Architecture
 
-`src/components/Trash2CashApp.tsx` is a single `"use client"` component (~1895 lines) containing all sub-components inline:
+`src/components/Trash2CashApp.tsx` is a single `"use client"` component (~2044 lines) containing most sub-components inline (the Leaflet map is a separate dynamic import `MiniMap.tsx`):
 
 | Sub-component | Purpose |
 |---|---|
@@ -103,7 +104,8 @@ src/
 | `CompleteScreen` | Receipt + SMS + report + restart |
 | `DashboardScreen` | Citizen profile, wallet balance, environmental impact, transaction history with pagination + date filters |
 | `WithdrawFlow` | Multi-step withdrawal flow (center → wallet → QR → receipt → complete) |
-| `HeatmapContent` | Leaflet-based community waste heatmap with filter tabs, marker detail modals, and geolocation locate button |
+| `HeatmapContent` | Leaflet-based community waste heatmap with filter tabs, marker detail modals, custom React-rendered layer toggle and geolocation button |
+| `MiniMap` | Dynamic-imported Leaflet map for collection center selection with custom React-rendered BaseMapToggle dropdown and LocateButton |
 | `ReportModal` | eReport complaint form with location codes and evidence upload |
 | `InfoAside` | Dark info card sidebar |
 | `TransactionAside` | Transaction summary sidebar |
@@ -184,7 +186,7 @@ All read from `process.env` (`.env.local` at project root):
 
 ## Styling Conventions
 
-- **File**: `src/app/globals.css` (~3987 lines, plain CSS)
+- **File**: `src/app/globals.css` (~4294 lines, plain CSS)
 - **No Tailwind, no CSS-in-JS, no CSS modules**
 - Naming: kebab-case BEM-like (`.login-page`, `.login-grid`, `.login-panel`, `.primary-action`, etc.)
 - Color scheme defined via `:root` CSS custom properties
@@ -201,6 +203,9 @@ All read from `process.env` (`.env.local` at project root):
 - Mock routes provide deterministic fallbacks when real providers are unavailable
 - All verification steps have event-test paths for hackathon demo continuity
 - Avatar navigates to dashboard/profile page after QR verification succeeds
+- Account button in header shows only the citizen's initials circle (no name, no "Verified citizen" label) to keep the header clean
+- Map controls (layer toggle, locate button) are React components absolutely positioned over the map, not Leaflet controls
+- eGov AI guidance text has markdown bold (`**`) stripped and replaced with ` :` for cleaner display
 
 ---
 

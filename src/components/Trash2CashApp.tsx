@@ -3,6 +3,7 @@
 import {
   type ChangeEvent,
   type ReactNode,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -548,7 +549,7 @@ useEffect(() => {
           <button className="report-button" disabled={!qrVerified} onClick={() => { setPrevStep(step); setStep("heatmap"); }}>Waste Heatmap</button>
           <button className="report-button" disabled={!qrVerified} onClick={() => setReportOpen(true)}>Report issue</button>
           <div className="account-dropdown-wrap">
-                      <button className="account-button" onClick={() => { if (qrVerified) { setPrevStep(step); setStep("dashboard"); } }}><span>{step === "verify" && !qrVerified ? "—" : initials}</span><div><strong>{step === "verify" && !qrVerified ? "Citizen" : displayName}</strong><small>{step === "verify" ? (qrVerified ? "Verified citizen" : "Citizen session") : "Verified citizen"}</small></div></button>
+                       <button className="account-button" onClick={() => { if (qrVerified) { setPrevStep(step); setStep("dashboard"); } }}><span>{step === "verify" && !qrVerified ? "—" : initials}</span></button>
           </div>
         </div>
       </header>
@@ -1245,10 +1246,13 @@ function HeatmapContent({ filter, onFilterChange }: { filter: "all" | "pending" 
   const circlesRef = useRef<any[]>([]);
   const userMarkerRef = useRef<any>(null);
   const loadedRef = useRef(false);
+  const tileLayerRef = useRef<any>(null);
+  const layerMenuRef = useRef<HTMLDivElement>(null);
   const [selectedMarker, setSelectedMarker] = useState<typeof HEATMAP_MARKERS[number] | null>(null);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
-  const [locationLoading, setLocationLoading] = useState(false);
   const [locateError, setLocateError] = useState("");
+  const [locating, setLocating] = useState(false);
+  const [baseMap, setBaseMap] = useState<"street" | "terrain" | "satellite">("street");
 
   const HEATMAP_MARKERS = [
     { id: "1", lat: 14.62, lng: 120.98, location: "Barangay San Antonio, QC", time: "2h ago", category: "Mixed Waste", status: "pending" as const, density: "critical" as const, reportType: "Environmental Violation", subject: "Uncollected waste blocking drainage", details: "Mixed waste has been accumulating for over a week, blocking the drainage canal along Magsaysay Street. Strong odor and stray animals reported in the area.", evidences: [] as string[] },
@@ -1301,10 +1305,9 @@ function HeatmapContent({ filter, onFilterChange }: { filter: "all" | "pending" 
         zoomControl: true,
       });
 
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: '&copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>',
-        maxZoom: 18,
-      }).addTo(map);
+      const tile = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 });
+      tile.addTo(map);
+      tileLayerRef.current = tile;
 
       mapInstanceRef.current = map;
       syncCircles(filter);
@@ -1330,6 +1333,18 @@ function HeatmapContent({ filter, onFilterChange }: { filter: "all" | "pending" 
       }
     };
   }, []);
+
+  const BASE_MAP_URLS: Record<string, string> = {
+    street: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    terrain: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
+    satellite: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+  };
+
+  useEffect(() => {
+    const tile = tileLayerRef.current;
+    if (!tile) return;
+    tile.setUrl(BASE_MAP_URLS[baseMap] || BASE_MAP_URLS.street);
+  }, [baseMap]);
 
   function syncCircles(currentFilter: string) {
     const map = mapInstanceRef.current;
@@ -1391,35 +1406,50 @@ function HeatmapContent({ filter, onFilterChange }: { filter: "all" | "pending" 
     };
   }, [userLocation]);
 
-  function getUserLocation() {
-    setLocateError("");
-    if (!navigator.geolocation) {
-      setLocateError("Geolocation is not supported by this browser.");
-      return;
+  const [layerMenuOpen, setLayerMenuOpen] = useState(false);
+
+  useEffect(() => {
+    if (!layerMenuOpen) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (layerMenuRef.current && !layerMenuRef.current.contains(e.target as Node)) {
+        setLayerMenuOpen(false);
+      }
     }
-    setLocationLoading(true);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [layerMenuOpen]);
+
+  const handleLocate = useCallback(() => {
+    const map = mapInstanceRef.current;
+    if (!map || !window.L) return;
+    setLocateError("");
+    if (!navigator.geolocation) { setLocateError("Geolocation is not supported by this browser."); return; }
+    setLocating(true);
     navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const loc = { lat: position.coords.latitude, lng: position.coords.longitude };
+      (pos) => {
+        const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         setUserLocation(loc);
-        setLocationLoading(false);
-        const map = mapInstanceRef.current;
-        if (map) {
-          map.setView([loc.lat, loc.lng], 14, { animate: true });
-        }
+        map.setView([loc.lat, loc.lng], 14, { animate: true });
+        setLocating(false);
       },
       (error) => {
-        setLocationLoading(false);
-        const messages: Record<number, string> = {
-          1: "Location access was denied. Enable location permissions in your browser settings.",
-          2: "Location information is unavailable. Try again.",
-          3: "Location request timed out. Try again.",
-        };
-        setLocateError(messages[error.code] || "Could not retrieve your location.");
+        setLocateError(
+          error.code === 1 ? "Location access was denied. Enable location permissions in your browser settings." :
+          error.code === 2 ? "Location information is unavailable. Try again." :
+          error.code === 3 ? "Location request timed out. Try again." :
+          "Could not retrieve your location."
+        );
+        setLocating(false);
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 },
     );
-  }
+  }, []);
+
+  const BASE_MAP_OPTIONS = [
+    { value: "street" as const, label: "Street", url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" },
+    { value: "terrain" as const, label: "Terrain", url: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png" },
+    { value: "satellite" as const, label: "Satellite", url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" },
+  ];
 
   return (
     <div className="heatmap-content">
@@ -1432,9 +1462,53 @@ function HeatmapContent({ filter, onFilterChange }: { filter: "all" | "pending" 
 
       <div className="heatmap-map-wrap">
         <div ref={mapRef} className="heatmap-map" />
-        <button className="locate-map-btn" disabled={locationLoading} onClick={getUserLocation}>
-          {locationLoading ? <i className="spinner" /> : <Icon name="location" size={16} />}
-        </button>
+        <div className="map-controls">
+          <div ref={layerMenuRef} className="map-controls-group">
+            <button
+              type="button"
+              onClick={() => setLayerMenuOpen((v) => !v)}
+              className="map-layer-btn"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+              {BASE_MAP_OPTIONS.find((o) => o.value === baseMap)?.label ?? "Street"}
+            </button>
+            {layerMenuOpen && (
+              <div className="map-layer-dropdown">
+                {BASE_MAP_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => {
+                      setBaseMap(opt.value);
+                      setLayerMenuOpen(false);
+                    }}
+                    className={`map-layer-option${baseMap === opt.value ? " active" : ""}`}
+                  >
+                    <span>{opt.label}</span>
+                    {baseMap === opt.value && (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={handleLocate}
+            disabled={locating}
+            className="map-locate-btn"
+            title="Use my location"
+            aria-label="Use my location"
+          >
+            {locating ? (
+              <span className="map-spinner" />
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>
+            )}
+            {locating ? "Locating..." : "Use My Location"}
+          </button>
+        </div>
         <div className="heatmap-legend">
           <span className="overline">Density</span>
           <div className="heatmap-legend-item"><span className="legend-dot" style={{ background: "#32815c" }} /> Low</div>

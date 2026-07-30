@@ -127,6 +127,7 @@ export async function askEGovAi(prompt: string): Promise<{ answer: string; sessi
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<[^>]+>/g, "")
     .replace(/&nbsp;/gi, " ")
+    .replace(/\*\*(.*?)\*\*/g, '$1 :')
     .trim();
 
   return {
