@@ -604,7 +604,6 @@ useEffect(() => {
         {step !== "dashboard" && step !== "capture" && (
           <div className="workspace-heading">
             <button className="back-button" onClick={goBack}><Icon name="back" size={18} /> Back</button>
-            <span>{Math.max(activeIndex + 1, 1).toString().padStart(2, "0")} / 08</span>
           </div>
         )}
 

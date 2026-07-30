@@ -4620,3 +4620,134 @@ select {
   }
 }
 
+
+/* V6 mobile transaction filters and fixed-width step indicator */
+@media (max-width: 760px) {
+  /* Keep all transaction filters within the dashboard width. */
+  .txn-filters {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .txn-filter-tabs {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    box-sizing: border-box;
+  }
+
+  .txn-filter-tab {
+    min-width: 0;
+    padding: 8px 4px;
+    text-align: center;
+  }
+
+  .txn-filter-dates {
+    width: 100%;
+    min-width: 0;
+    align-items: stretch;
+  }
+
+  .txn-filter-date-toggle {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    justify-content: flex-start;
+  }
+
+  .txn-filter-date-toggle > svg,
+  .txn-filter-date-caret {
+    flex: 0 0 auto;
+  }
+
+  .txn-filter-date-toggle > span:first-of-type {
+    overflow: hidden;
+    flex: 1 1 auto;
+    min-width: 0;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* The panel participates in document flow on mobile, so it cannot cover the list or escape the viewport. */
+  .txn-filter-date-panel {
+    position: static;
+    display: grid;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: end;
+    gap: 10px;
+    margin-top: 0;
+    border: 1px solid var(--line);
+    box-shadow: none;
+  }
+
+  .txn-filter-date-field,
+  .txn-filter-date-field input {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    box-sizing: border-box;
+  }
+
+  .txn-filter-date-clear {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+}
+
+@media (max-width: 680px) {
+  /* Eight equal columns always fit the viewport; there is no horizontal scrolling. */
+  .progress-wrap {
+    overflow-x: hidden;
+    padding: 10px 8px;
+  }
+
+  .progress-track {
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+    isolation: isolate;
+  }
+
+  .progress-item {
+    min-width: 0;
+    justify-content: center;
+    gap: 0;
+  }
+
+  .progress-item::after {
+    z-index: 0;
+    right: -50%;
+    left: 50%;
+  }
+
+  .progress-item > span {
+    position: relative;
+    z-index: 1;
+    width: clamp(20px, 6.5vw, 25px);
+    height: clamp(20px, 6.5vw, 25px);
+    font-size: 8px;
+  }
+
+  .progress-item.active > span {
+    box-shadow: 0 0 0 3px rgba(200, 255, 61, 0.23);
+  }
+
+  .progress-item small {
+    display: none;
+  }
+}
+
+@media (max-width: 420px) {
+  .txn-filter-date-panel {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .txn-filter-date-clear {
+    grid-column: 1;
+  }
+}
