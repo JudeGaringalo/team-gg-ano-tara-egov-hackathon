@@ -1132,6 +1132,13 @@ function ReportModal({ citizen, transactionId, onClose }: { citizen: CitizenProf
   const [gender, setGender] = useState(citizen?.gender || "Prefer not to say");
   const [evidences, setEvidences] = useState<string[]>([]);
   const evidenceInputRef = useRef<HTMLInputElement>(null);
+  const [pinLat, setPinLat] = useState(14.60);
+  const [pinLng, setPinLng] = useState(120.98);
+  const [resolvingLocation, setResolvingLocation] = useState(false);
+  const [resolvedAddress, setResolvedAddress] = useState("");
+  const locationMapRef = useRef<HTMLDivElement>(null);
+  const locationMapInstance = useRef<any>(null);
+  const locationMarkerRef = useRef<any>(null);
 
   function addEvidence(file: File) {
     if (evidences.length >= 3) return;
@@ -1156,6 +1163,79 @@ function ReportModal({ citizen, transactionId, onClose }: { citizen: CitizenProf
     ILLEGAL_DUMPING: "crime",
     PAYMENT_CONCERN: "scam",
   };
+
+  useEffect(() => {
+    if (locationMapInstance.current || !locationMapRef.current) return;
+    let cancelled = false;
+    import("leaflet").then((L) => {
+      if (cancelled || locationMapInstance.current || !locationMapRef.current) return;
+      const map = L.map(locationMapRef.current, {
+        center: [pinLat, pinLng],
+        zoom: 11,
+        zoomControl: true,
+        attributionControl: false,
+      });
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(map);
+
+      async function handleClick(e: any) {
+        const { lat, lng } = e.latlng;
+        setPinLat(lat);
+        setPinLng(lng);
+        if (locationMarkerRef.current) map.removeLayer(locationMarkerRef.current);
+        const icon = L.divIcon({
+          className: "",
+          html: '<svg width="28" height="28" viewBox="0 0 24 24" fill="#32815c" stroke="#fff" stroke-width="2"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="3" fill="#fff"/></svg>',
+          iconSize: [28, 28],
+          iconAnchor: [14, 28],
+        });
+        locationMarkerRef.current = L.marker([lat, lng], { icon }).addTo(map);
+
+        setResolvingLocation(true);
+        setResolvedAddress("");
+        try {
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1&accept-language=fil`);
+          const data = await res.json();
+          const addr = data.address || {};
+          const regionName = addr.state || "";
+          const provinceName = addr.state_district || "";
+          const cityName = addr.city || addr.town || addr.municipality || "";
+          const barangayName = addr.village || addr.suburb || addr.neighbourhood || data.display_name?.split(",")[0] || "";
+          setResolvedAddress(data.display_name || "");
+
+          const regionsRes = await fetch("/api/ereport/regions");
+          const regionsData = await regionsRes.json();
+          const regions = regionsData.data || [];
+          const region = regions.find((r: any) => r.attributes?.name?.toLowerCase().includes(regionName.toLowerCase()));
+          if (region) {
+            setRegionCode(region.id);
+            const provsRes = await fetch(`/api/ereport/provinces?region_code=${region.id}`);
+            const provsData = await provsRes.json();
+            const provs = provsData.data || [];
+            const prov = provs.find((p: any) => p.attributes?.name?.toLowerCase().includes(provinceName.toLowerCase()));
+            if (prov) {
+              setProvinceCode(prov.id);
+              const munsRes = await fetch(`/api/ereport/municipalities?province_code=${prov.id}`);
+              const munsData = await munsRes.json();
+              const muns = munsData.data || [];
+              const mun = muns.find((m: any) => m.attributes?.name?.toLowerCase().includes(cityName.toLowerCase()));
+              if (mun) {
+                setMunicipalityCode(mun.id);
+                const brgysRes = await fetch(`/api/ereport/barangays?municipality_code=${mun.id}`);
+                const brgysData = await brgysRes.json();
+                const brgys = brgysData.data || [];
+                const brgy = brgys.find((b: any) => b.attributes?.name?.toLowerCase().includes(barangayName.toLowerCase()));
+                if (brgy) setBarangayCode(brgy.id);
+              }
+            }
+          }
+        } catch {}
+        setResolvingLocation(false);
+      }
+      map.on("click", handleClick);
+      locationMapInstance.current = map;
+    });
+    return () => { cancelled = true; if (locationMapInstance.current) { locationMapInstance.current.remove(); locationMapInstance.current = null; } };
+  }, []);
 
   function submitReport() {
     if (!message.trim() || !subject.trim() || !email.trim() || !mobile.trim()) {
@@ -1184,13 +1264,31 @@ function ReportModal({ citizen, transactionId, onClose }: { citizen: CitizenProf
             province_code: provinceCode,
             municipality_code: municipalityCode,
             barangay_code: barangayCode,
-            latitude: "14.60",
-            longitude: "120.98",
+            latitude: String(pinLat),
+            longitude: String(pinLng),
           }),
         });
         const payload = (await response.json()) as { case_number?: string; message?: string; error?: string };
         if (!response.ok) throw new Error(payload.error || "eReport could not submit the report.");
         setResult({ type: "success", text: payload.case_number ? `Report submitted. Case number: ${payload.case_number}` : payload.message || "Report submitted successfully." });
+        try {
+          const stored = JSON.parse(localStorage.getItem("trash2cash-heatmap-markers") || "[]");
+          stored.push({
+            id: `user-${Date.now()}`,
+            lat: +pinLat.toFixed(4),
+            lng: +pinLng.toFixed(4),
+            location: (resolvedAddress || "User-submitted report").slice(0, 80),
+            time: "Just now",
+            category: reportType.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+            status: "pending",
+            density: "moderate",
+            reportType,
+            subject,
+            details: message,
+            evidences: [],
+          });
+          localStorage.setItem("trash2cash-heatmap-markers", JSON.stringify(stored));
+        } catch {}
       } catch (error) {
         setResult({ type: "error", text: error instanceof Error ? error.message : "eReport could not submit the report." });
       } finally {
@@ -1232,7 +1330,22 @@ function ReportModal({ citizen, transactionId, onClose }: { citizen: CitizenProf
           {evidences.length === 0 && <p className="evidence-hint">Add at least one photo to proceed</p>}
           <input ref={evidenceInputRef} hidden type="file" accept="image/*" capture="environment" onChange={handleEvidenceInput} />
         </div>
-        <details className="location-codes"><summary>Location codes</summary><div className="report-form-grid"><label><span>Region</span><input value={regionCode} onChange={(event) => setRegionCode(event.target.value)} /></label><label><span>Province</span><input value={provinceCode} onChange={(event) => setProvinceCode(event.target.value)} /></label><label><span>Municipality</span><input value={municipalityCode} onChange={(event) => setMunicipalityCode(event.target.value)} /></label><label><span>Barangay</span><input value={barangayCode} onChange={(event) => setBarangayCode(event.target.value)} /></label></div></details>
+        <div className="location-picker">
+          <span className="overline">Pin the incident location</span>
+          <div ref={locationMapRef} className="location-map" />
+          {resolvingLocation && <p className="location-resolving">Resolving location…</p>}
+          {resolvedAddress && (
+            <div className="location-resolved">
+              <p className="location-address">{resolvedAddress}</p>
+              <div className="report-form-grid">
+                <label className="field light-field"><span>Region</span><div className="field-control"><input value={regionCode} readOnly /></div></label>
+                <label className="field light-field"><span>Province</span><div className="field-control"><input value={provinceCode} readOnly /></div></label>
+                <label className="field light-field"><span>Municipality</span><div className="field-control"><input value={municipalityCode} readOnly /></div></label>
+                <label className="field light-field"><span>Barangay</span><div className="field-control"><input value={barangayCode} readOnly /></div></label>
+              </div>
+            </div>
+          )}
+        </div>
         {result && <div className={result.type === "error" ? "provider-error" : "provider-success"}>{result.text}</div>}
         <div className="modal-actions"><button className="secondary-action" onClick={onClose}>Close</button><button className="primary-action" disabled={busy || result?.type === "success"} onClick={() => void submitReport()}><span>{busy ? "Submitting…" : "Submit through e-Report"}</span><Icon name="arrow" /></button></div>
       </section>
@@ -1254,7 +1367,7 @@ function HeatmapContent({ filter, onFilterChange }: { filter: "all" | "pending" 
   const [locating, setLocating] = useState(false);
   const [baseMap, setBaseMap] = useState<"street" | "terrain" | "satellite">("street");
 
-  const HEATMAP_MARKERS = [
+  const HARDCODED_MARKERS = [
     { id: "1", lat: 14.62, lng: 120.98, location: "Barangay San Antonio, QC", time: "2h ago", category: "Mixed Waste", status: "pending" as const, density: "critical" as const, reportType: "Environmental Violation", subject: "Uncollected waste blocking drainage", details: "Mixed waste has been accumulating for over a week, blocking the drainage canal along Magsaysay Street. Strong odor and stray animals reported in the area.", evidences: [] as string[] },
     { id: "2", lat: 14.58, lng: 121.04, location: "Barangay Pinyahan, QC", time: "5h ago", category: "Plastic Bottles", status: "pending" as const, density: "moderate" as const, reportType: "Illegal Dumping", subject: "Dumped plastic bottles along sidewalk", details: "Large quantity of plastic bottles illegally dumped along the sidewalk near the public market. Suspected midnight dumping.", evidences: [] as string[] },
     { id: "3", lat: 14.65, lng: 121.02, location: "Barangay Old Balara, QC", time: "1d ago", category: "E-Waste", status: "dispatched" as const, density: "moderate" as const, reportType: "Service Complaint", subject: "E-waste pickup request", details: "Residents requesting scheduled pickup for collected e-waste (old monitors, keyboards, cables) at the barangay hall.", evidences: [] as string[] },
@@ -1263,6 +1376,15 @@ function HeatmapContent({ filter, onFilterChange }: { filter: "all" | "pending" 
     { id: "6", lat: 14.63, lng: 121.01, location: "Barangay UP Campus, QC", time: "6h ago", category: "Mixed Recyclables", status: "dispatched" as const, density: "moderate" as const, reportType: "Illegal Dumping", subject: "Mixed recyclables scattered along bike lane", details: "Mixed recyclable materials (bottles, paper, cans) scattered along the bike lane near the university gate. LGU dispatch en route.", evidences: [] as string[] },
     { id: "7", lat: 14.56, lng: 120.97, location: "Barangay Bel-Air, Makati", time: "4d ago", category: "Glass Bottles", status: "cleared" as const, density: "low" as const, reportType: "Service Complaint", subject: "Glass bottle collection completed", details: "Glass bottle accumulation at the recycling drop-off point has been collected and processed. Area is now clear.", evidences: [] as string[] },
   ];
+
+  const HEATMAP_MARKERS = useMemo(() => {
+    let stored: any[] = [];
+    try {
+      const raw = localStorage.getItem("trash2cash-heatmap-markers");
+      if (raw) stored = JSON.parse(raw);
+    } catch {}
+    return [...HARDCODED_MARKERS, ...stored];
+  }, []);
 
   const filteredMarkers = HEATMAP_MARKERS.filter((m) => {
     if (filter === "all") return true;
