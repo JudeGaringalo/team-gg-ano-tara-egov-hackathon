@@ -4334,3 +4334,268 @@ select {
     font-size: 9px;
   }
 }
+
+/* Responsive overlap fixes */
+.app-header,
+.header-actions,
+.account-dropdown-wrap,
+.account-card,
+.account-card-left,
+.account-card-info {
+  min-width: 0;
+}
+
+/* Keep map UI inside its own stacking context so it cannot cover the sticky header. */
+.mini-map-wrap,
+.heatmap-map-wrap {
+  isolation: isolate;
+}
+
+.map-controls {
+  max-width: calc(100% - 24px);
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.map-layer-btn,
+.map-locate-btn {
+  min-width: 0;
+  min-height: 34px;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.account-card-info strong,
+.account-card-info small,
+.account-dropdown-head strong,
+.account-dropdown-head small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  /* The same actions remain available in the avatar menu on compact screens. */
+  .app-header .report-button {
+    display: none;
+  }
+
+  .app-header {
+    gap: 12px;
+  }
+
+  .header-actions {
+    flex: 0 0 auto;
+  }
+
+  .account-dropdown {
+    width: min(280px, calc(100vw - 30px));
+    min-width: 0;
+  }
+
+  .heatmap-tabs {
+    width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+
+  .heatmap-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .heatmap-tabs button {
+    flex: 0 0 auto;
+  }
+}
+
+@media (max-width: 560px) {
+  /* Preserve the top-right placement while preventing the two controls from colliding. */
+  .map-controls {
+    top: 10px;
+    right: 10px;
+    max-width: calc(100% - 68px);
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: flex-end;
+  }
+
+  .map-layer-btn,
+  .map-locate-btn {
+    width: max-content;
+    max-width: 100%;
+    padding: 7px 10px;
+  }
+
+  .map-layer-dropdown {
+    top: calc(100% + 2px);
+  }
+
+  /* Keep the account identity and its action grouped instead of stretching them apart. */
+  .account-card {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 16px;
+  }
+
+  .account-card-left {
+    flex: 1 1 210px;
+    max-width: 100%;
+  }
+
+  .account-card-signout {
+    flex: 0 0 auto;
+    min-height: 40px;
+  }
+}
+
+@media (max-width: 400px) {
+  .map-controls {
+    max-width: calc(100% - 62px);
+  }
+
+  .map-layer-btn,
+  .map-locate-btn {
+    font-size: 10px;
+  }
+
+  .account-card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .account-card-left,
+  .account-card-signout {
+    width: 100%;
+  }
+
+  .account-card-signout {
+    justify-content: center;
+  }
+}
+
+/* Mobile account spacing and unobstructed toast placement */
+.account-card-content {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+@media (max-width: 680px) {
+  .account-card {
+    align-items: flex-start;
+    justify-content: flex-start;
+  }
+
+  .account-card-content {
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 8px;
+  }
+
+  .account-card-signout {
+    width: auto;
+    min-height: 36px;
+    justify-content: flex-start;
+    padding: 7px 10px;
+  }
+
+  /* Mobile notices belong at the top, directly below the sticky app header. */
+  .toast {
+    z-index: 120;
+    top: calc(80px + env(safe-area-inset-top, 0px));
+    right: 14px;
+    bottom: auto;
+    left: 14px;
+    width: auto;
+    max-height: calc(100svh - 96px);
+  }
+}
+
+@media (max-width: 400px) {
+  .account-card {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+
+  .account-card-content {
+    width: calc(100% - 58px);
+  }
+
+  .account-card-signout {
+    width: auto;
+    align-self: flex-start;
+  }
+}
+
+
+/* Definitive account-card layout: keep Sign out attached to the identity. */
+.account-card {
+  justify-content: flex-start;
+}
+
+.account-card-info {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "account-name account-signout"
+    "account-email account-signout";
+  column-gap: 14px;
+  row-gap: 2px;
+  align-items: center;
+  min-width: 0;
+}
+
+.account-card-info > strong {
+  grid-area: account-name;
+  min-width: 0;
+}
+
+.account-card-info > small {
+  grid-area: account-email;
+  min-width: 0;
+}
+
+.account-card-info > .account-card-signout {
+  grid-area: account-signout;
+  justify-self: end;
+  margin: 0;
+}
+
+@media (max-width: 680px) {
+  .account-card {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 12px;
+  }
+
+  .account-card-info {
+    width: auto;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "account-name"
+      "account-email"
+      "account-signout";
+    column-gap: 0;
+    row-gap: 2px;
+    align-items: start;
+  }
+
+  .account-card-info > .account-card-signout {
+    width: auto;
+    min-height: 34px;
+    justify-self: start;
+    align-self: start;
+    justify-content: flex-start;
+    margin-top: 4px;
+    padding: 7px 10px;
+  }
+}

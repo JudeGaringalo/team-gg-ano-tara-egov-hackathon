@@ -1809,14 +1809,12 @@ function DashboardScreen({ onBack, citizen, displayName, initials, onLogout }: {
       <div className="account-section">
         <span className="overline">Account</span>
         <div className="account-card">
-          <div className="account-card-left">
-            <span className="account-card-avatar">{initials}</span>
-            <div className="account-card-info">
-              <strong>{displayName}</strong>
-              <small>{citizen?.email || "Verified citizen"}</small>
-            </div>
+          <span className="account-card-avatar">{initials}</span>
+          <div className="account-card-info">
+            <strong>{displayName}</strong>
+            <small>{citizen?.email || "Verified citizen"}</small>
+            <button className="account-card-signout" onClick={onLogout}>Sign out <Icon name="logout" /></button>
           </div>
-          <button className="account-card-signout" onClick={onLogout}>Sign out <Icon name="logout" /></button>
         </div>
       </div>
 
