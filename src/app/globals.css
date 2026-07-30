@@ -53,8 +53,21 @@ input:focus-visible,
   display: inline-flex;
   align-items: center;
   gap: 11px;
+  border-radius: 8px;
   color: #f4f5ef;
+  cursor: pointer;
   letter-spacing: -0.04em;
+  text-decoration: none;
+  transition: opacity 160ms ease;
+}
+
+.brand:hover {
+  opacity: 0.82;
+}
+
+.brand:focus-visible {
+  outline: 3px solid rgba(200, 255, 61, 0.48);
+  outline-offset: 4px;
 }
 
 .brand.dark {

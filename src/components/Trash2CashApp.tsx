@@ -604,6 +604,7 @@ useEffect(() => {
         {step !== "dashboard" && step !== "capture" && (
           <div className="workspace-heading">
             <button className="back-button" onClick={goBack}><Icon name="back" size={18} /> Back</button>
+            <span>{Math.max(activeIndex + 1, 1).toString().padStart(2, "0")} / 08</span>
           </div>
         )}
 
@@ -635,14 +636,19 @@ useEffect(() => {
 }
 function Brand({ dark = false }: { dark?: boolean }) {
   return (
-    <div className={dark ? "brand dark" : "brand"}>
+    <a
+      className={dark ? "brand dark" : "brand"}
+      href="/"
+      aria-label="Go to the eKalakal landing page"
+      title="Go to the eKalakal landing page"
+    >
       <img
         src={dark ? "/eKalakal Logo - Black.svg" : "/eKalakal Logo - White.svg"}
         alt="eKalakal"
         height={34}
         style={{ display: "block" }}
       />
-    </div>
+    </a>
   );
 }
 
