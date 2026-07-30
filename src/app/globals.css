@@ -2988,32 +2988,46 @@ select {
   grid-column: 1 / -1;
 }
 
-.location-codes {
+.location-picker {
   margin-top: 16px;
-  padding: 15px;
-  border: 1px solid #d9dcd4;
+}
+
+.location-picker .overline {
+  margin-bottom: 10px;
+}
+
+.location-map {
+  height: 240px;
+  border: 1px solid var(--line);
   border-radius: 14px;
-  background: #fff;
+  overflow: hidden;
 }
 
-.location-codes summary {
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.location-codes label {
-  display: grid;
-  gap: 6px;
+.location-resolving {
+  margin: 8px 0 0;
+  color: var(--muted);
   font-size: 11px;
-  font-weight: 800;
 }
 
-.location-codes input {
-  min-width: 0;
-  padding: 11px 12px;
-  border: 1px solid #d9dcd4;
-  border-radius: 10px;
+.location-resolved {
+  margin-top: 12px;
+}
+
+.location-address {
+  margin: 0 0 10px;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.location-resolved .report-form-grid {
+  margin-top: 0;
+}
+
+.location-resolved .field input {
+  font-size: 11px;
+  background: #f2f4ee;
+  cursor: default;
 }
 
 .evidence-section {

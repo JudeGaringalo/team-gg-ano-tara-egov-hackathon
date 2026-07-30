@@ -82,10 +82,56 @@ export async function submitEReportComplaint(input: EReportComplaintInput): Prom
     cache: "no-store",
     signal: withTimeout(45_000),
   });
+
+  if (!response.ok) {
+    let detail = "";
+    try { const err = await response.json(); detail = err.message || err.error || ""; } catch {}
+    throw new Error(detail || `eReport rejected the submission (${response.status}).`);
+  }
+
   const payload = await readProviderJson<ComplaintResponse>(response, "eReport");
   console.error("[ereport] submit response:", { status: response.status, payload });
-  if (!response.ok || (!payload.case_number && payload.code !== 200)) {
+  if (!payload.case_number && payload.code !== 200) {
     throw new Error(providerMessage(payload, `eReport could not submit the report (${response.status}).`));
   }
   return payload;
+}
+
+async function fetchDataset(path: string): Promise<any[]> {
+  const { baseUrl } = config();
+  const token = await getToken();
+  const response = await fetch(`${baseUrl}${path}`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+    signal: withTimeout(15_000),
+  });
+
+  if (!response.ok) {
+    let detail = "";
+    try { const err = await response.json(); detail = err.message || err.error || ""; } catch {}
+    throw new Error(detail || `eReport dataset request failed (${response.status}).`);
+  }
+
+  const payload = await readProviderJson<{ data?: any[] }>(response, "eReport");
+  if (!payload.data) {
+    throw new Error(`eReport dataset response is missing data.`);
+  }
+  return payload.data;
+}
+
+export function getRegions() {
+  return fetchDataset("/api/integration/datasets/regions");
+}
+
+export function getProvinces(regionCode: string) {
+  return fetchDataset(`/api/integration/datasets/provinces?region_code=${encodeURIComponent(regionCode)}`);
+}
+
+export function getMunicipalities(provinceCode: string) {
+  return fetchDataset(`/api/integration/datasets/municipalities?province_code=${encodeURIComponent(provinceCode)}`);
+}
+
+export function getBarangays(municipalityCode: string) {
+  return fetchDataset(`/api/integration/datasets/barangays?municipality_code=${encodeURIComponent(municipalityCode)}`);
 }
