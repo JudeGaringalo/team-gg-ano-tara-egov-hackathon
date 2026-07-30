@@ -263,6 +263,22 @@ function wait(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
+function resetViewportToTop() {
+  if (typeof window === "undefined") return;
+
+  const root = document.documentElement;
+  const previousScrollBehavior = root.style.scrollBehavior;
+  root.style.scrollBehavior = "auto";
+
+  window.scrollTo(0, 0);
+  root.scrollTop = 0;
+  document.body.scrollTop = 0;
+
+  window.requestAnimationFrame(() => {
+    root.style.scrollBehavior = previousScrollBehavior;
+  });
+}
+
 export default function eKalakalApp() {
   const [step, setStep] = useState<Step>("login");
   const [citizen, setCitizen] = useState<CitizenProfile | null>(null);
@@ -307,6 +323,11 @@ useEffect(() => {
       }
     }
   }, []);
+
+  useEffect(() => {
+    setAvatarOpen(false);
+    resetViewportToTop();
+  }, [step]);
 
   function notify(message: string) {
     setToast(message);
@@ -1978,6 +1999,24 @@ function WithdrawFlow({ citizen, displayName, initials, onClose }: { citizen: Ci
   const [error, setError] = useState("");
 
   const selectedCenterData = CENTERS_LIST.find((c) => c.id === selectedCenter) ?? CENTERS_LIST[0];
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const scrollContainer = document.querySelector<HTMLElement>(".withdraw-modal-backdrop");
+      if (!scrollContainer) return;
+
+      const previousScrollBehavior = scrollContainer.style.scrollBehavior;
+      scrollContainer.style.scrollBehavior = "auto";
+      scrollContainer.scrollTop = 0;
+      scrollContainer.scrollLeft = 0;
+
+      window.requestAnimationFrame(() => {
+        scrollContainer.style.scrollBehavior = previousScrollBehavior;
+      });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [subStep]);
 
   function goBackSub() {
     if (subStep === "center") { onClose(); return; }

@@ -4599,3 +4599,24 @@ select {
     padding: 7px 10px;
   }
 }
+
+/* Mobile dropdown: keep Sign out directly attached to the navigation options. */
+@media (max-width: 560px) {
+  .dropdown-mobile-sep {
+    display: none !important;
+  }
+
+  .account-dropdown-body {
+    gap: 0;
+  }
+
+  .account-dropdown-option {
+    min-height: 40px;
+    padding: 8px 10px;
+  }
+
+  .account-dropdown-option.logout {
+    margin-top: 0;
+  }
+}
+
