@@ -1,7 +1,7 @@
 import { normalizeBaseUrl, providerMessage, readProviderJson, withTimeout } from "./provider-http";
 
 type TokenResponse = { access_token?: string; expires_at?: string; message?: string; error?: string };
-type CachedToken = { value: string; expiresAt: number };
+type CachedToken = { value: string; expiresAt: number; baseUrl: string };
 declare global {
   // eslint-disable-next-line no-var
   var __trash2cashEreportToken: CachedToken | undefined;
@@ -44,8 +44,8 @@ async function getToken(): Promise<string> {
   }
 
   const cached = globalThis.__trash2cashEreportToken;
-  if (cached && cached.expiresAt > Date.now() + 60_000) {
-    console.error("[ereport] using cached token, expires at", new Date(cached.expiresAt).toISOString());
+  if (cached && cached.baseUrl === baseUrl && cached.expiresAt > Date.now() + 60_000) {
+    console.error("[ereport] using cached token for", cached.baseUrl, "expires at", new Date(cached.expiresAt).toISOString());
     return cached.value;
   }
 
@@ -65,6 +65,7 @@ async function getToken(): Promise<string> {
   globalThis.__trash2cashEreportToken = {
     value: payload.access_token,
     expiresAt: payload.expires_at ? Date.parse(payload.expires_at) : Date.now() + 50 * 60 * 1000,
+    baseUrl,
   };
   console.error("[ereport] token cached, expires at", payload.expires_at);
   return payload.access_token;
