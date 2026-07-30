@@ -19,7 +19,7 @@ export async function POST(request: Request) {
       .slice(2, 7)
       .toUpperCase()}`;
     const claimCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const claimUrl = `https://demo.trash2cash.gov.ph/claim?ref=${encodeURIComponent(
+    const claimUrl = `https://demo.ekalakal.gov.ph/claim?ref=${encodeURIComponent(
       paymentReference,
     )}&amount=${amount.toFixed(2)}&provider=${encodeURIComponent(provider)}`;
 

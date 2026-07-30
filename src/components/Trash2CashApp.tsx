@@ -12,6 +12,7 @@ import {
 import { QRCodeSVG } from "qrcode.react";
 import jsQR from "jsqr";
 import dynamic from "next/dynamic";
+import "leaflet/dist/leaflet.css";
 
 const MiniMap = dynamic(() => import("./MiniMap"), { ssr: false });
 
@@ -262,7 +263,7 @@ function wait(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
-export default function Trash2CashApp() {
+export default function eKalakalApp() {
   const [step, setStep] = useState<Step>("login");
   const [citizen, setCitizen] = useState<CitizenProfile | null>(null);
   const [loginBusy, setLoginBusy] = useState(false);
@@ -285,6 +286,7 @@ export default function Trash2CashApp() {
   const [egovPayTxnData, setEgovPayTxnData] = useState<Record<string, unknown> | null>(null);
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentError, setPaymentError] = useState("");
+  const [avatarOpen, setAvatarOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const selectedCenterData = CENTERS.find((center) => center.id === selectedCenter) ?? CENTERS[0];
@@ -296,12 +298,12 @@ export default function Trash2CashApp() {
   const activeIndex = useMemo(() => FLOW_STEPS.findIndex((item) => item.key === normalizedStep), [normalizedStep]);
 
 useEffect(() => {
-    const stored = window.sessionStorage.getItem("trash2cash-citizen");
+    const stored = window.sessionStorage.getItem("ekalakal-citizen");
     if (stored) {
       try {
         JSON.parse(stored) as CitizenProfile;
       } catch {
-        window.sessionStorage.removeItem("trash2cash-citizen");
+        window.sessionStorage.removeItem("ekalakal-citizen");
       }
     }
   }, []);
@@ -328,7 +330,7 @@ useEffect(() => {
     };
     setCitizen(profile);
     setQrVerified(false);
-    window.sessionStorage.setItem("trash2cash-citizen", JSON.stringify(profile));
+    window.sessionStorage.setItem("ekalakal-citizen", JSON.stringify(profile));
     setLoginBusy(false);
     setStep("verify");
     notify("Citizen session started");
@@ -399,7 +401,7 @@ useEffect(() => {
   }
 
   function logout() {
-    window.sessionStorage.removeItem("trash2cash-citizen");
+    window.sessionStorage.removeItem("ekalakal-citizen");
     setCitizen(null);
     setQrVerified(false);
     setStep("login");
@@ -549,7 +551,28 @@ useEffect(() => {
           <button className="report-button" disabled={!qrVerified} onClick={() => { setPrevStep(step); setStep("heatmap"); }}>Waste Heatmap</button>
           <button className="report-button" disabled={!qrVerified} onClick={() => setReportOpen(true)}>Report issue</button>
           <div className="account-dropdown-wrap">
-                       <button className="account-button" onClick={() => { if (qrVerified) { setPrevStep(step); setStep("dashboard"); } }}><span>{step === "verify" && !qrVerified ? "—" : initials}</span></button>
+            <button className="account-button" onClick={() => setAvatarOpen((v) => !v)}><span>{step === "verify" && !qrVerified ? "—" : initials}</span></button>
+            {avatarOpen && (
+              <>
+                <div className="dropdown-backdrop" onClick={() => setAvatarOpen(false)} />
+                <div className="account-dropdown">
+                  <div className="account-dropdown-head">
+                    <span>{initials}</span>
+                    <div>
+                      <strong>{displayName}</strong>
+                      <small>{citizen?.email || "Verified citizen"}</small>
+                    </div>
+                  </div>
+                  <div className="account-dropdown-body">
+                    <button className="account-dropdown-option" onClick={() => { setAvatarOpen(false); setPrevStep(step); setStep("dashboard"); }}>Profile</button>
+                    <button className="account-dropdown-option" disabled={!qrVerified} onClick={() => { setAvatarOpen(false); setPrevStep(step); setStep("heatmap"); }}>Waste Heatmap</button>
+                    <button className="account-dropdown-option" disabled={!qrVerified} onClick={() => { setAvatarOpen(false); setReportOpen(true); }}>Report issue</button>
+                    <hr className="dropdown-mobile-sep" />
+                    <button className="account-dropdown-option logout" onClick={() => { setAvatarOpen(false); logout(); }}>Sign out</button>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -885,7 +908,25 @@ function VerifyScreen({ citizen, onVerified }: { citizen: CitizenProfile | null;
 }
 
 function VerificationCard({ icon, number, title, text, state }: { icon: IconName; number: string; title: string; text: string; state: "idle" | "loading" | "done" }) {
-  return <div className={`verification-card ${state}`}><span className="verification-icon"><Icon name={icon} size={25} /></span><small>{number}</small><h3>{title}</h3><p>{text}</p><div className="verification-state">{state === "loading" ? <><i className="spinner" />Checking…</> : state === "done" ? <><Icon name="check" size={16} />Verified</> : "Ready"}</div></div>;
+  return (
+    <div className={`verification-card ${state}`}>
+      <div className="verification-card-icon">
+        <Icon name={icon} size={48} />
+      </div>
+      <div className="verification-card-content">
+        <h3>{title}</h3>
+        <p>{text}</p>
+        <div className="verification-card-footer">
+          <small>{number}</small>
+          {state === "loading" ? (
+            <span className="verification-state"><i className="spinner" />Checking…</span>
+          ) : state === "done" ? (
+            <span className="verification-state verified"><Icon name="check" size={14} />Verified</span>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
 }
 function CaptureScreen({ photo, inputRef, onPhoto, onSample, analyzing, onAnalyze }: { photo: string | null; inputRef: React.RefObject<HTMLInputElement | null>; onPhoto: (event: ChangeEvent<HTMLInputElement>) => void; onSample: () => void; analyzing: boolean; onAnalyze: () => void }) {
   return (
@@ -1019,13 +1060,13 @@ function WalletScreen({ wallet, setWallet, account, setAccount, cash, onContinue
       eyebrow="Reward channel"
       title="Select your payment channel."
       description={`Choose where the approved ${formatMoney(cash)} reward should be received. The partner payout flow will generate the claim reference.`}
-      aside={<InfoAside icon="wallet" title="Secure reward claim" text="Trash2Cash prepares the validated reward for the selected payment channel without storing the citizen’s wallet balance." tags={["GCash", "Maya", "Bank"]} />}
+      aside={<InfoAside icon="wallet" title="Secure reward claim" text="eKalakal prepares the validated reward for the selected payment channel without storing the citizen’s wallet balance." tags={["GCash", "Maya", "Bank"]} />}
     >
       <div className="wallet-grid">
         {wallets.map((item) => <button key={item.name} className={wallet === item.name ? "wallet-card selected" : "wallet-card"} onClick={() => setWallet(item.name)}><span className={`wallet-mark ${item.mark.toLowerCase()}`}>{item.mark}</span><div><h3>{item.name}</h3><small>{item.helper}</small></div><span className="radio">{wallet === item.name && <i />}</span></button>)}
       </div>
       <label className="field light-field"><span>{wallet === "Bank Account" ? "Bank account reference" : `${wallet} mobile number`}</span><div className="field-control"><Icon name="wallet" size={19} /><input value={account} onChange={(event) => setAccount(event.target.value)} placeholder={wallet === "Bank Account" ? "Enter account reference" : "09XX XXX XXXX"} /></div></label>
-      <div className="process-line"><span>01</span><p>Trash2Cash confirms the validated reward and selected channel.</p><span>02</span><p>{wallet} generates the payment-partner claim reference.</p></div>
+      <div className="process-line"><span>01</span><p>eKalakal confirms the validated reward and selected channel.</p><span>02</span><p>{wallet} generates the payment-partner claim reference.</p></div>
       <div className="action-row"><button className="primary-action" disabled={!account.trim()} onClick={onContinue}><span>Generate {wallet} claim QR</span><Icon name="arrow" /></button></div>
     </Screen>
   );
@@ -1054,7 +1095,7 @@ function PointsScreen({ points, onContinue }: { points: number; onContinue: () =
     <Screen
       eyebrow="Green Points"
       title="Your verified points are ready."
-      description="The points will be credited to your Trash2Cash account and can be used through participating programs and partner merchants."
+      description="The points will be credited to your eKalakal account and can be used through participating programs and partner merchants."
       aside={<InfoAside icon="leaf" title="Community value" text="Green Points support continued participation while keeping every achievement tied to a verified recycling transaction." tags={["Eco rewards", "Partner offers"]} />}
     >
       <div className="points-hero"><span><Icon name="leaf" size={44} /></span><small>Points to be credited</small><strong>+{points}</strong><p>Updated balance: {1420 + points} Green Points</p></div>
@@ -1082,7 +1123,7 @@ function CompleteScreen({ citizen, material, rewardType, wallet, cash, points, w
       const response = await fetch("/api/emessage/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ number: mobile, message: `Trash2Cash ${transactionId}: Your ${weight.toFixed(1)} kg recycling transaction at ${center.name} is complete. Reward: ${reward}.` }),
+        body: JSON.stringify({ number: mobile, message: `eKalakal ${transactionId}: Your ${weight.toFixed(1)} kg recycling transaction at ${center.name} is complete. Reward: ${reward}.` }),
       });
       const payload = (await response.json()) as { message?: string; error?: string };
       if (!response.ok) throw new Error(payload.error || "The confirmation SMS could not be sent.");
@@ -1102,7 +1143,7 @@ function CompleteScreen({ citizen, material, rewardType, wallet, cash, points, w
       aside={<InfoAside icon="check" title="Verified completion" text="This transaction is now recorded as completed and cannot be claimed again." tags={[transactionId, `eGovPay: ${(egovPayTxnData?.refno as string) || egovPayTxnData?.uuid as string || "Pending"}`, "Completed"]} />}
     >
       <div className="complete-banner"><span><Icon name="check" size={36} /></span><div><small>Reward issued</small><h3>{rewardType === "cash" ? `${formatMoney(cash)} through ${wallet}` : `${points} Green Points credited`}</h3><p>Thank you for helping divert recyclable waste from landfill.</p></div></div>
-      <div className="receipt"><div className="receipt-head"><span>TRASH2CASH RECEIPT</span><strong>{transactionId}</strong></div><ReceiptLine label="Material" value={material.name} /><ReceiptLine label="Validated weight" value={`${weight.toFixed(1)} kg`} /><ReceiptLine label="Collection center" value={center.name} /><ReceiptLine label="Reward" value={rewardType === "cash" ? `${formatMoney(cash)} · ${wallet}` : `${points} Green Points`} />{egovPayTxnData?.refno ? <ReceiptLine label="eGovPay Ref No." value={egovPayTxnData.refno as string} /> : null}{egovPayTxnData?.payment_status ? <ReceiptLine label="Payment status" value={egovPayTxnData.payment_status as string} /> : null}<ReceiptLine label="Status" value="Completed" /></div>
+      <div className="receipt"><div className="receipt-head"><span>EKALAKAL RECEIPT</span><strong>{transactionId}</strong></div><ReceiptLine label="Material" value={material.name} /><ReceiptLine label="Validated weight" value={`${weight.toFixed(1)} kg`} /><ReceiptLine label="Collection center" value={center.name} /><ReceiptLine label="Reward" value={rewardType === "cash" ? `${formatMoney(cash)} · ${wallet}` : `${points} Green Points`} />{egovPayTxnData?.refno ? <ReceiptLine label="eGovPay Ref No." value={egovPayTxnData.refno as string} /> : null}{egovPayTxnData?.payment_status ? <ReceiptLine label="Payment status" value={egovPayTxnData.payment_status as string} /> : null}<ReceiptLine label="Status" value="Completed" /></div>
 
       <div className="message-panel">
         <div><span className="overline">e-Message</span><h3>Send transaction confirmation</h3><p>{mobile ? `The SMS will be sent to ${mobile}.` : "No valid mobile number is available in the citizen profile."}</p></div>
@@ -1117,7 +1158,7 @@ function CompleteScreen({ citizen, material, rewardType, wallet, cash, points, w
 
 function ReportModal({ citizen, transactionId, onClose }: { citizen: CitizenProfile | null; transactionId: string; onClose: () => void }) {
   const [reportType, setReportType] = useState("SERVICE_COMPLAINT");
-  const [subject, setSubject] = useState(`Trash2Cash concern · ${transactionId}`);
+  const [subject, setSubject] = useState(`eKalakal concern · ${transactionId}`);
   const [message, setMessage] = useState("");
   const [mobile, setMobile] = useState(normalizePhMobile(String(citizen?.mobile_number || citizen?.mobile || "")) || "09274542237");
   const [email, setEmail] = useState(citizen?.email || "");
@@ -1272,7 +1313,7 @@ function ReportModal({ citizen, transactionId, onClose }: { citizen: CitizenProf
         if (!response.ok) throw new Error(payload.error || "eReport could not submit the report.");
         setResult({ type: "success", text: payload.case_number ? `Report submitted. Case number: ${payload.case_number}` : payload.message || "Report submitted successfully." });
         try {
-          const stored = JSON.parse(localStorage.getItem("trash2cash-heatmap-markers") || "[]");
+          const stored = JSON.parse(localStorage.getItem("ekalakal-heatmap-markers") || "[]");
           stored.push({
             id: `user-${Date.now()}`,
             lat: +pinLat.toFixed(4),
@@ -1287,7 +1328,7 @@ function ReportModal({ citizen, transactionId, onClose }: { citizen: CitizenProf
             details: message,
             evidences: [],
           });
-          localStorage.setItem("trash2cash-heatmap-markers", JSON.stringify(stored));
+          localStorage.setItem("ekalakal-heatmap-markers", JSON.stringify(stored));
         } catch {}
       } catch (error) {
         setResult({ type: "error", text: error instanceof Error ? error.message : "eReport could not submit the report." });
@@ -1300,15 +1341,14 @@ function ReportModal({ citizen, transactionId, onClose }: { citizen: CitizenProf
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) onClose(); }}>
       <section className="report-modal" role="dialog" aria-modal="true" aria-labelledby="report-title">
-        <div className="report-modal-head"><div><span className="overline">e-Report</span><h2 id="report-title">Report a Trash2Cash issue</h2></div><button className="modal-close" onClick={onClose} aria-label="Close report form">×</button></div>
+        <div className="report-modal-head"><div><span className="overline">e-Report</span><h2 id="report-title">Report an eKalakal issue</h2></div><button className="modal-close" onClick={onClose} aria-label="Close report form">×</button></div>
         <p>Send service, weighing, payment, facility, or environmental concerns to the government reporting service.</p>
         <div className="report-form-grid">
-          <label className="field light-field"><span>Report type</span><div className="field-control"><select value={reportType} onChange={(event) => setReportType(event.target.value)}><option value="SERVICE_COMPLAINT">Service complaint</option><option value="ENVIRONMENTAL_VIOLATION">Environmental violation</option><option value="ILLEGAL_DUMPING">Illegal dumping</option><option value="PAYMENT_CONCERN">Reward concern</option></select></div></label>
-          <label className="field light-field"><span>Mobile number</span><div className="field-control"><input value={mobile} onChange={(event) => setMobile(event.target.value)} /></div></label>
-          <label className="field light-field"><span>Email address</span><div className="field-control"><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} /></div></label>
+          <label className="field light-field span-two"><span>Report type</span><div className="field-control"><select value={reportType} onChange={(event) => setReportType(event.target.value)}><option value="SERVICE_COMPLAINT">Service complaint</option><option value="ENVIRONMENTAL_VIOLATION">Environmental violation</option><option value="ILLEGAL_DUMPING">Illegal dumping</option><option value="PAYMENT_CONCERN">Reward concern</option></select></div></label>
           <label className="field light-field"><span>First name</span><div className="field-control"><input value={firstName} onChange={(event) => setFirstName(event.target.value)} /></div></label>
           <label className="field light-field"><span>Last name</span><div className="field-control"><input value={lastName} onChange={(event) => setLastName(event.target.value)} /></div></label>
-          <label className="field light-field"><span>Gender</span><div className="field-control"><select value={gender} onChange={(event) => setGender(event.target.value)}><option value="Male">Male</option><option value="Female">Female</option><option value="Prefer not to say">Prefer not to say</option></select></div></label>
+          <label className="field light-field"><span>Email address</span><div className="field-control"><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} /></div></label>
+          <label className="field light-field"><span>Mobile number</span><div className="field-control"><input value={mobile} onChange={(event) => setMobile(event.target.value)} /></div></label>
           <label className="field light-field span-two"><span>Subject</span><div className="field-control"><input value={subject} onChange={(event) => setSubject(event.target.value)} /></div></label>
           <label className="field light-field span-two"><span>Report details</span><div className="field-control"><textarea value={message} onChange={(event) => setMessage(event.target.value)} rows={5} placeholder="Explain what happened, where it happened, and the outcome you need." /></div></label>
         </div>
@@ -1360,12 +1400,13 @@ function HeatmapContent({ filter, onFilterChange }: { filter: "all" | "pending" 
   const userMarkerRef = useRef<any>(null);
   const loadedRef = useRef(false);
   const tileLayerRef = useRef<any>(null);
+  const LRef = useRef<any>(null);
   const layerMenuRef = useRef<HTMLDivElement>(null);
   const [selectedMarker, setSelectedMarker] = useState<typeof HEATMAP_MARKERS[number] | null>(null);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locateError, setLocateError] = useState("");
   const [locating, setLocating] = useState(false);
-  const [baseMap, setBaseMap] = useState<"street" | "terrain" | "satellite">("street");
+  const [baseMap, setBaseMap] = useState<"street" | "terrain" | "satellite">("satellite");
 
   const HARDCODED_MARKERS = [
     { id: "1", lat: 14.62, lng: 120.98, location: "Barangay San Antonio, QC", time: "2h ago", category: "Mixed Waste", status: "pending" as const, density: "critical" as const, reportType: "Environmental Violation", subject: "Uncollected waste blocking drainage", details: "Mixed waste has been accumulating for over a week, blocking the drainage canal along Magsaysay Street. Strong odor and stray animals reported in the area.", evidences: [] as string[] },
@@ -1380,7 +1421,7 @@ function HeatmapContent({ filter, onFilterChange }: { filter: "all" | "pending" 
   const HEATMAP_MARKERS = useMemo(() => {
     let stored: any[] = [];
     try {
-      const raw = localStorage.getItem("trash2cash-heatmap-markers");
+      const raw = localStorage.getItem("ekalakal-heatmap-markers");
       if (raw) stored = JSON.parse(raw);
     } catch {}
     return [...HARDCODED_MARKERS, ...stored];
@@ -1397,29 +1438,16 @@ function HeatmapContent({ filter, onFilterChange }: { filter: "all" | "pending" 
 
     const container = mapRef.current;
 
-    function tryInit() {
+    async function tryInit() {
       if (mapInstanceRef.current) return;
-      const L = window.L;
-      if (!L) {
-        if (!document.querySelector('script[src*="leaflet"]')) {
-          const link = document.createElement("link");
-          link.id = "leaflet-css";
-          link.rel = "stylesheet";
-          link.href = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css";
-          document.head.appendChild(link);
-          const script = document.createElement("script");
-          script.src = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js";
-          script.onload = tryInit;
-          document.body.appendChild(script);
-        } else {
-          setTimeout(tryInit, 500);
-        }
-        return;
-      }
       if (!container || container.clientWidth === 0) {
         setTimeout(tryInit, 200);
         return;
       }
+
+      const mod = await import("leaflet");
+      const L = mod.default || mod;
+      LRef.current = L;
 
       const map = L.map(container, {
         center: [14.60, 120.98],
@@ -1427,7 +1455,7 @@ function HeatmapContent({ filter, onFilterChange }: { filter: "all" | "pending" 
         zoomControl: true,
       });
 
-      const tile = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 });
+      const tile = L.tileLayer(BASE_MAP_URLS[baseMap] || BASE_MAP_URLS.satellite, { maxZoom: 19 });
       tile.addTo(map);
       tileLayerRef.current = tile;
 
@@ -1470,16 +1498,15 @@ function HeatmapContent({ filter, onFilterChange }: { filter: "all" | "pending" 
 
   function syncCircles(currentFilter: string) {
     const map = mapInstanceRef.current;
-    if (!map || !window.L) return;
+    const L = LRef.current;
+    if (!map || !L) return;
 
     circlesRef.current.forEach((c: any) => map.removeLayer(c));
     circlesRef.current = [];
-
-    const L = window.L;
     const densityConfig: Record<string, { radius: number; color: string; fillOpacity: number }> = {
       critical: { radius: 500, color: "#ff6c56", fillOpacity: 0.55 },
-      moderate: { radius: 400, color: "#c8ff3d", fillOpacity: 0.45 },
-      low: { radius: 300, color: "#32815c", fillOpacity: 0.35 },
+      moderate: { radius: 400, color: "#ff6c56", fillOpacity: 0.3 },
+      low: { radius: 300, color: "#ff6c56", fillOpacity: 0.12 },
     };
 
     for (const marker of HEATMAP_MARKERS) {
@@ -1508,8 +1535,8 @@ function HeatmapContent({ filter, onFilterChange }: { filter: "all" | "pending" 
 
   useEffect(() => {
     const map = mapInstanceRef.current;
-    if (!map || !window.L || !userLocation) return;
-    const L = window.L;
+    const L = LRef.current;
+    if (!map || !L || !userLocation) return;
     if (userMarkerRef.current) {
       map.removeLayer(userMarkerRef.current);
     }
@@ -1543,7 +1570,7 @@ function HeatmapContent({ filter, onFilterChange }: { filter: "all" | "pending" 
 
   const handleLocate = useCallback(() => {
     const map = mapInstanceRef.current;
-    if (!map || !window.L) return;
+    if (!map) return;
     setLocateError("");
     if (!navigator.geolocation) { setLocateError("Geolocation is not supported by this browser."); return; }
     setLocating(true);
@@ -1633,8 +1660,8 @@ function HeatmapContent({ filter, onFilterChange }: { filter: "all" | "pending" 
         </div>
         <div className="heatmap-legend">
           <span className="overline">Density</span>
-          <div className="heatmap-legend-item"><span className="legend-dot" style={{ background: "#32815c" }} /> Low</div>
-          <div className="heatmap-legend-item"><span className="legend-dot" style={{ background: "#c8ff3d" }} /> Moderate</div>
+          <div className="heatmap-legend-item"><span className="legend-dot" style={{ background: "#ff6c56", opacity: 0.35 }} /> Low</div>
+          <div className="heatmap-legend-item"><span className="legend-dot" style={{ background: "#ff6c56", opacity: 0.6 }} /> Moderate</div>
           <div className="heatmap-legend-item"><span className="legend-dot" style={{ background: "#ff6c56" }} /> Critical</div>
         </div>
       </div>
@@ -1677,8 +1704,8 @@ function HeatmapContent({ filter, onFilterChange }: { filter: "all" | "pending" 
               <div className="span-two" style={{ display: "flex", flexDirection: "column", gap: 4 }}><span className="qr-detail-label">Subject</span><span className="qr-detail-value">{selectedMarker.subject}</span></div>
               <div className="span-two"><span className="qr-detail-label">Report Details</span><p style={{ margin: "6px 0 0", fontSize: 13, lineHeight: 1.6, color: "var(--ink)" }}>{selectedMarker.details}</p></div>
             </div>
-<div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, marginTop: 18 }}>
-              <button className="primary-action" style={{ minHeight: 36, padding: "0 14px", fontSize: 11 }} onClick={() => { const m = mapInstanceRef.current; if (m) { m.setView([selectedMarker.lat, selectedMarker.lng], 14, { animate: true }); } setSelectedMarker(null); }}>
+<div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 18 }}>
+              <button className="primary-action" style={{ minHeight: 36, padding: "0 14px", fontSize: 11, justifyContent: "center" }} onClick={() => { const m = mapInstanceRef.current; if (m) { m.setView([selectedMarker.lat, selectedMarker.lng], 14, { animate: true }); } setSelectedMarker(null); }}>
                 <span>View on map</span><Icon name="location" size={14} />
               </button>
               <button className="secondary-action" style={{ minHeight: 36, padding: "0 14px", fontSize: 11 }} onClick={() => setSelectedMarker(null)}>Close</button>
@@ -2101,7 +2128,7 @@ function WithdrawFlow({ citizen, displayName, initials, onClose }: { citizen: Ci
             </div>
             <div className="receipt">
               <div className="receipt-head">
-                <span>TRASH2CASH WITHDRAWAL</span>
+                <span>EKALAKAL WITHDRAWAL</span>
                 <strong>{txnid}</strong>
               </div>
               <ReceiptLine label="Amount" value={formatMoney(amount)} />

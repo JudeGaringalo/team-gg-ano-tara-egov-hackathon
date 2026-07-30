@@ -4,7 +4,7 @@ type TokenResponse = { access_token?: string; expires_at?: string; message?: str
 type CachedToken = { value: string; expiresAt: number; baseUrl: string };
 declare global {
   // eslint-disable-next-line no-var
-  var __trash2cashEreportToken: CachedToken | undefined;
+  var __ekalakalEreportToken: CachedToken | undefined;
 }
 
 export type EReportComplaintInput = {
@@ -43,7 +43,7 @@ async function getToken(): Promise<string> {
     return staticToken;
   }
 
-  const cached = globalThis.__trash2cashEreportToken;
+  const cached = globalThis.__ekalakalEreportToken;
   if (cached && cached.baseUrl === baseUrl && cached.expiresAt > Date.now() + 60_000) {
     console.error("[ereport] using cached token for", cached.baseUrl, "expires at", new Date(cached.expiresAt).toISOString());
     return cached.value;
@@ -62,7 +62,7 @@ async function getToken(): Promise<string> {
   if (!response.ok || !payload.access_token) {
     throw new Error(providerMessage(payload, `eReport could not generate an integration token (${response.status}).`));
   }
-  globalThis.__trash2cashEreportToken = {
+  globalThis.__ekalakalEreportToken = {
     value: payload.access_token,
     expiresAt: payload.expires_at ? Date.parse(payload.expires_at) : Date.now() + 50 * 60 * 1000,
     baseUrl,

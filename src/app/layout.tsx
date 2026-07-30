@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Trash2Cash",
+  title: "eKalakal",
   description: "Verified recycling rewards for Filipino citizens.",
 };
 

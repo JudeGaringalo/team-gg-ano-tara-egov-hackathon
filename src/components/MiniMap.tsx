@@ -147,7 +147,7 @@ export default function MiniMap({
   const markersRef = useRef<L.Marker[]>([]);
   const userMarkerRef = useRef<L.Marker | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
-  const [baseMap, setBaseMap] = useState<BaseMap>("street");
+  const [baseMap, setBaseMap] = useState<BaseMap>("satellite");
 
   useEffect(() => {
     if (mapInstance.current || !mapRef.current) return;
@@ -163,7 +163,8 @@ export default function MiniMap({
       scrollWheelZoom: true,
     });
 
-    const tile = L.tileLayer(BASE_MAP_OPTIONS[0].url, { maxZoom: BASE_MAP_OPTIONS[0].maxZoom }).addTo(map);
+    const initialOpt = BASE_MAP_OPTIONS.find((o) => o.value === baseMap) ?? BASE_MAP_OPTIONS[2];
+    const tile = L.tileLayer(initialOpt.url, { maxZoom: initialOpt.maxZoom }).addTo(map);
     tileLayerRef.current = tile;
 
     mapInstance.current = map;

@@ -3,7 +3,7 @@ import { normalizeBaseUrl, providerMessage, readProviderJson, withTimeout } from
 type CachedToken = { value: string; expiresAt: number };
 declare global {
   // eslint-disable-next-line no-var
-  var __trash2cashEverifyToken: CachedToken | undefined;
+  var __ekalakalEverifyToken: CachedToken | undefined;
 }
 
 type AuthResponse = {
@@ -58,7 +58,7 @@ function parseExpiry(value: string | number | undefined): number {
 }
 
 export async function getEVerifyToken(forceRefresh = false): Promise<string> {
-  const cached = globalThis.__trash2cashEverifyToken;
+  const cached = globalThis.__ekalakalEverifyToken;
   if (!forceRefresh && cached && cached.expiresAt > Date.now() + 60_000) return cached.value;
 
   const { baseUrl, clientId, clientSecret } = config();
@@ -75,7 +75,7 @@ export async function getEVerifyToken(forceRefresh = false): Promise<string> {
     throw new Error(providerMessage(payload, `National ID e-Verify authentication failed (${response.status}).`));
   }
 
-  globalThis.__trash2cashEverifyToken = {
+  globalThis.__ekalakalEverifyToken = {
     value: token,
     expiresAt: parseExpiry(payload.data?.expires_at),
   };

@@ -24,7 +24,7 @@ type CachedToken = {
 
 declare global {
   // eslint-disable-next-line no-var
-  var __trash2cashEgovAiToken: CachedToken | undefined;
+  var __ekalakalEgovAiToken: CachedToken | undefined;
 }
 
 function getConfig() {
@@ -50,7 +50,7 @@ async function readJson<T>(response: Response): Promise<T> {
 
 export async function getEGovAiToken(forceRefresh = false): Promise<string> {
   const now = Date.now();
-  const cached = globalThis.__trash2cashEgovAiToken;
+  const cached = globalThis.__ekalakalEgovAiToken;
 
   if (!forceRefresh && cached && cached.expiresAt > now + 60_000) {
     return cached.value;
@@ -72,7 +72,7 @@ export async function getEGovAiToken(forceRefresh = false): Promise<string> {
   }
 
   const ttlSeconds = Math.max(payload.expires_in_seconds || 28_800, 120);
-  globalThis.__trash2cashEgovAiToken = {
+  globalThis.__ekalakalEgovAiToken = {
     value: payload.access_token,
     expiresAt: now + ttlSeconds * 1000,
   };

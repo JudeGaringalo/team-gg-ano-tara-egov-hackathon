@@ -13,7 +13,7 @@ export async function POST(request: Request) {
     const question = body.question?.trim();
 
     const prompt = question || `
-You are the citizen guidance assistant for Trash2Cash, a Philippine recycling incentive service.
+You are the citizen guidance assistant for eKalakal, a Philippine recycling incentive service.
 
 The image-recognition step identified the submitted material as: ${material}.
 

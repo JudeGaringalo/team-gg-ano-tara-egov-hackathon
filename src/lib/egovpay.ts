@@ -47,8 +47,8 @@ export async function createEGovPayCollection(input: {
     callback_url: input.callbackUrl,
     redirect_url: input.redirectUrl,
     txnid: input.txnid,
-    description: input.description || { purpose: "Trash2Cash transaction" },
-    items: [{ name: "Trash2Cash transaction", amount }],
+    description: input.description || { purpose: "eKalakal transaction" },
+    items: [{ name: "eKalakal transaction", amount }],
   };
   if (input.mobile) body.mobile = input.mobile;
   if (input.email) body.email = input.email;
