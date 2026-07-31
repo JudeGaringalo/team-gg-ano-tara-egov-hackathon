@@ -599,6 +599,13 @@ input:focus-visible,
   color: #d32f2f;
 }
 
+@media (min-width: 761px) {
+  .account-dropdown,
+  .dropdown-backdrop {
+    display: none;
+  }
+}
+
 .option-icon {
   font-size: 6px;
   color: #aab0a2;
@@ -1334,10 +1341,39 @@ input:focus-visible,
 }
 
 .photo-card {
+  position: relative;
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 24px;
   background: #fff;
+}
+
+.photo-scan-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: rgba(16, 17, 15, 0.72);
+  color: #fff;
+  backdrop-filter: blur(10px);
+}
+
+.photo-scan-overlay i.spinner {
+  width: 34px;
+  height: 34px;
+  border-width: 3px;
+  border-color: rgba(255, 255, 255, 0.32);
+  border-top-color: #fff;
+}
+
+.photo-scan-overlay span {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
 }
 
 .photo-card > img,
@@ -2070,6 +2106,11 @@ i.spinner {
   animation: spin .6s linear infinite;
 }
 
+i.spinner.light {
+  border-color: rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+}
+
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
@@ -2300,6 +2341,10 @@ i.spinner {
 
 /* Responsive */
 @media (max-width: 1120px) {
+  .verify-upload-option {
+    display: none;
+  }
+
   .login-grid {
     grid-template-columns: minmax(0, 1fr) minmax(390px, 0.8fr);
   }
@@ -2674,6 +2719,11 @@ i.spinner {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
   }
+
+  i.spinner, .map-spinner {
+    animation-duration: 0.6s !important;
+    animation-iteration-count: infinite !important;
+  }
 }
 
 /* Live provider integration controls */
@@ -2872,6 +2922,13 @@ select {
   object-fit: cover;
 }
 
+.qr-camera-box img {
+  width: 100%;
+  height: 100%;
+  min-height: 260px;
+  object-fit: contain;
+}
+
 .qr-camera-box > div {
   display: grid;
   max-width: 210px;
@@ -2892,6 +2949,18 @@ select {
   align-items: flex-start;
   flex-direction: column;
   gap: 14px;
+}
+
+.verify-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.verify-actions .secondary-action {
+  font-size: 12px;
 }
 
 .verify-controls .field {

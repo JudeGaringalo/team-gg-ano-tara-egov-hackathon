@@ -285,6 +285,7 @@ export default function eKalakalApp() {
   const [loginBusy, setLoginBusy] = useState(false);
   const [photo, setPhoto] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
+  const [analysisStatus, setAnalysisStatus] = useState("Analyzing image…");
   const [material, setMaterial] = useState<MaterialResult>(DEFAULT_MATERIAL);
   const [aiGuidance, setAiGuidance] = useState("");
   const [selectedCenter, setSelectedCenter] = useState(CENTERS[0].id);
@@ -378,9 +379,11 @@ useEffect(() => {
     if (!photo) return;
 
     setAnalyzing(true);
+    setAnalysisStatus("Analyzing image…");
     try {
       let result = DEFAULT_MATERIAL;
       if (photo !== "sample") {
+        setAnalysisStatus("Identifying materials…");
         const tf = await import("@tensorflow/tfjs");
         const mobilenet = await import("@tensorflow-models/mobilenet");
         await tf.ready();
@@ -394,6 +397,7 @@ useEffect(() => {
       setActualWeight(result.estimatedWeight);
 
       try {
+        setAnalysisStatus("Analyzing image…");
         const response = await fetch("/api/egov-ai/assistant", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -572,7 +576,7 @@ useEffect(() => {
           <button className="report-button" disabled={!qrVerified} onClick={() => { setPrevStep(step); setStep("heatmap"); }}>Waste Heatmap</button>
           <button className="report-button" disabled={!qrVerified} onClick={() => setReportOpen(true)}>Report issue</button>
           <div className="account-dropdown-wrap">
-            <button className="account-button" onClick={() => setAvatarOpen((v) => !v)}><span>{step === "verify" && !qrVerified ? "—" : initials}</span></button>
+            <button className="account-button" onClick={() => { if (window.matchMedia("(max-width: 760px)").matches) setAvatarOpen((v) => !v); }}><span>{step === "verify" && !qrVerified ? "—" : initials}</span></button>
             {avatarOpen && (
               <>
                 <div className="dropdown-backdrop" onClick={() => setAvatarOpen(false)} />
@@ -609,7 +613,7 @@ useEffect(() => {
         )}
 
         {step === "verify" && <VerifyScreen citizen={citizen} onVerified={(verified) => { setCitizen((current) => ({ ...(current || {}), ...verified })); setQrVerified(true); setStep("capture"); notify("National ID and Face Liveness verified"); }} />}
-        {step === "capture" && <CaptureScreen photo={photo} inputRef={inputRef} onPhoto={handlePhoto} onSample={useSamplePhoto} analyzing={analyzing} onAnalyze={analyzePhoto} />}
+        {step === "capture" && <CaptureScreen photo={photo} inputRef={inputRef} onPhoto={handlePhoto} onSample={useSamplePhoto} analyzing={analyzing} status={analysisStatus} onAnalyze={analyzePhoto} />}
         {step === "estimate" && <EstimateScreen material={material} guidance={aiGuidance} onContinue={() => setStep("center")} />}
         {step === "center" && <CenterScreen material={material} selected={selectedCenter} onSelect={setSelectedCenter} onContinue={() => setStep("validation")} />}
         {step === "validation" && <ValidationScreen material={material} center={selectedCenterData} weight={actualWeight} setWeight={setActualWeight} cash={finalCash} points={finalPoints} onContinue={() => setStep("reward")} />}
@@ -725,9 +729,11 @@ function VerifyScreen({ citizen, onVerified }: { citizen: CitizenProfile | null;
   const [status, setStatus] = useState<"idle" | "qr" | "face" | "done">("idle");
   const [error, setError] = useState("");
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const scanningRef = useRef(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => () => stopCamera(), []);
 
@@ -757,8 +763,39 @@ function VerifyScreen({ citizen, onVerified }: { citizen: CitizenProfile | null;
     }
   }
 
+  async function handleImageUpload(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setError("");
+    setQrValue("");
+    setQrDecoded(null);
+    const objectUrl = URL.createObjectURL(file);
+    setImagePreview(objectUrl);
+    try {
+      const image = await loadImageElement(objectUrl);
+      const canvas = document.createElement("canvas");
+      const scale = Math.min(1, 1024 / image.naturalWidth);
+      canvas.width = Math.round(image.naturalWidth * scale);
+      canvas.height = Math.round(image.naturalHeight * scale);
+      const ctx = canvas.getContext("2d")!;
+      ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height);
+      if (!code) {
+        setError("No QR code detected in the selected image.");
+        return;
+      }
+      setQrValue(code.data);
+      void autoCheckQr(code.data);
+    } catch {
+      setError("Unable to read the selected image.");
+    }
+  }
+
   async function startQrCamera() {
     setError("");
+    setImagePreview(null);
     if (!navigator.mediaDevices?.getUserMedia) {
       setError("Camera access is not supported in this browser. Paste the QR value instead.");
       return;
@@ -908,11 +945,15 @@ function VerifyScreen({ citizen, onVerified }: { citizen: CitizenProfile | null;
       </div>
 
       <div className="verify-method-card">
+        <input ref={fileRef} hidden type="file" accept="image/*" onChange={(event) => void handleImageUpload(event)} />
         <div className="qr-camera-box">
-          {cameraOpen ? <video ref={videoRef} muted playsInline aria-label="National ID QR camera" /> : <div><Icon name="camera" size={34} /><strong>National ID QR camera</strong><span>Use the rear camera and hold the QR inside the frame.</span></div>}
+          {cameraOpen ? <video ref={videoRef} muted playsInline aria-label="National ID QR camera" /> : imagePreview ? <img src={imagePreview} alt="Uploaded National ID QR" /> : <div><Icon name="camera" size={34} /><strong>National ID QR camera</strong><span>Use the rear camera and hold the QR inside the frame.</span></div>}
         </div>
         <div className="verify-controls">
-          <button className="secondary-action" type="button" onClick={cameraOpen ? stopCamera : () => void startQrCamera()}>{cameraOpen ? "Stop camera" : "Open QR camera"}</button>
+          <div className="verify-actions">
+            <button className="secondary-action" type="button" onClick={cameraOpen ? stopCamera : () => void startQrCamera()}>{cameraOpen ? "Stop camera" : "Open QR camera"}</button>
+            <button className="secondary-action verify-upload-option" type="button" onClick={() => fileRef.current?.click()}>Upload QR image</button>
+          </div>
           {qrDecoded ? (
             <QrDetailsCard data={qrDecoded} />
           ) : (
@@ -954,7 +995,7 @@ function VerificationCard({ icon, number, title, text, state }: { icon: IconName
     </div>
   );
 }
-function CaptureScreen({ photo, inputRef, onPhoto, onSample, analyzing, onAnalyze }: { photo: string | null; inputRef: React.RefObject<HTMLInputElement | null>; onPhoto: (event: ChangeEvent<HTMLInputElement>) => void; onSample: () => void; analyzing: boolean; onAnalyze: () => void }) {
+function CaptureScreen({ photo, inputRef, onPhoto, onSample, analyzing, status, onAnalyze }: { photo: string | null; inputRef: React.RefObject<HTMLInputElement | null>; onPhoto: (event: ChangeEvent<HTMLInputElement>) => void; onSample: () => void; analyzing: boolean; status: string; onAnalyze: () => void }) {
   return (
     <Screen
       eyebrow="Material capture"
@@ -974,10 +1015,16 @@ function CaptureScreen({ photo, inputRef, onPhoto, onSample, analyzing, onAnalyz
       ) : (
         <div className="photo-card">
           {photo === "sample" ? <BottleScene /> : <img src={photo} alt="Selected recyclable materials" />}
+          {analyzing && (
+            <div className="photo-scan-overlay" role="status" aria-live="polite">
+              <i className="spinner" />
+              <span>{status}</span>
+            </div>
+          )}
           <div className="photo-meta"><span><Icon name="check" size={16} /> Materials ready for analysis</span><button onClick={() => inputRef.current?.click()}>Replace image</button></div>
         </div>
       )}
-      <div className="action-row"><button className="primary-action" disabled={!photo || analyzing} onClick={onAnalyze}><span>{analyzing ? "Analyzing materials…" : "Analyze recyclable image"}</span><Icon name="sparkles" /></button></div>
+      <div className="action-row"><button className="primary-action" disabled={!photo || analyzing} onClick={onAnalyze}><span>{analyzing ? status : "Analyze recyclable image"}</span>{analyzing ? <i className="spinner light" /> : <Icon name="sparkles" />}</button></div>
     </Screen>
   );
 }
