@@ -588,7 +588,7 @@ useEffect(() => {
           <button className="report-button" disabled={!qrVerified} onClick={() => { setPrevStep(step); setStep("heatmap"); }}>Waste Heatmap</button>
           <button className="report-button" disabled={!qrVerified} onClick={() => setReportOpen(true)}>Report issue</button>
           <div className="account-dropdown-wrap">
-            <button className="account-button" onClick={() => { if (window.matchMedia("(max-width: 760px)").matches) setAvatarOpen((v) => !v); else { setAvatarOpen(false); setPrevStep(step); setStep("dashboard"); } }}><span>{step === "verify" && !qrVerified ? "—" : initials}</span></button>
+            <button className="account-button" disabled={!qrVerified} onClick={() => { if (!qrVerified) return; if (window.matchMedia("(max-width: 760px)").matches) setAvatarOpen((v) => !v); else { setAvatarOpen(false); setPrevStep(step); setStep("dashboard"); } }}><span>{step === "verify" && !qrVerified ? "—" : initials}</span></button>
             {avatarOpen && (
               <>
                 <div className="dropdown-backdrop" onClick={() => setAvatarOpen(false)} />

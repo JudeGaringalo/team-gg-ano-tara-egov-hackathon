@@ -480,6 +480,10 @@ input:focus-visible,
   cursor: pointer;
 }
 
+.account-button:disabled {
+  cursor: default;
+}
+
 .account-button > span {
   display: grid;
   width: 38px;
