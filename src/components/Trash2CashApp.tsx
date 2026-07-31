@@ -425,6 +425,18 @@ useEffect(() => {
     }
   }
 
+  function updateCitizenMobile(input: string) {
+    const normalized = normalizePhMobile(input);
+    if (!normalized) {
+      notify("Enter a valid Philippine mobile number, e.g. 0917 000 0000.");
+      return;
+    }
+    const updated = { ...citizen, mobile: normalized, mobile_number: normalized };
+    setCitizen(updated);
+    window.sessionStorage.setItem("ekalakal-citizen", JSON.stringify(updated));
+    notify("Mobile number updated");
+  }
+
   function logout() {
     window.sessionStorage.removeItem("ekalakal-citizen");
     setCitizen(null);
@@ -576,7 +588,7 @@ useEffect(() => {
           <button className="report-button" disabled={!qrVerified} onClick={() => { setPrevStep(step); setStep("heatmap"); }}>Waste Heatmap</button>
           <button className="report-button" disabled={!qrVerified} onClick={() => setReportOpen(true)}>Report issue</button>
           <div className="account-dropdown-wrap">
-            <button className="account-button" onClick={() => { if (window.matchMedia("(max-width: 760px)").matches) setAvatarOpen((v) => !v); }}><span>{step === "verify" && !qrVerified ? "—" : initials}</span></button>
+            <button className="account-button" onClick={() => { if (window.matchMedia("(max-width: 760px)").matches) setAvatarOpen((v) => !v); else { setAvatarOpen(false); setPrevStep(step); setStep("dashboard"); } }}><span>{step === "verify" && !qrVerified ? "—" : initials}</span></button>
             {avatarOpen && (
               <>
                 <div className="dropdown-backdrop" onClick={() => setAvatarOpen(false)} />
@@ -621,8 +633,8 @@ useEffect(() => {
         {step === "wallet" && <WalletScreen wallet={wallet} setWallet={setWallet} account={account} setAccount={setAccount} cash={finalCash} onContinue={() => setStep("paymentQr")} />}
         {step === "paymentQr" && <PaymentQrScreen material={material} wallet={wallet} cash={finalCash} transactionId={transactionId} egovPayUrl={egovPayUrl} paymentLoading={paymentLoading} paymentError={paymentError} onConfirm={handleConfirmPayment} />}
         {step === "points" && <PointsScreen points={finalPoints} onContinue={() => setStep("complete")} />}
-        {step === "dashboard" && <DashboardScreen citizen={citizen} displayName={displayName} initials={initials} onBack={() => setStep(prevStep ?? "reward")} onLogout={logout} />}
-        {step === "complete" && <CompleteScreen citizen={citizen} material={material} rewardType={rewardType} wallet={wallet} cash={finalCash} points={finalPoints} weight={actualWeight} center={selectedCenterData} transactionId={transactionId} egovPayTxnData={egovPayTxnData} onRestart={restart} />}
+        {step === "dashboard" && <DashboardScreen citizen={citizen} displayName={displayName} initials={initials} onBack={() => setStep(prevStep ?? "reward")} onLogout={logout} onUpdateMobile={updateCitizenMobile} />}
+        {step === "complete" && <CompleteScreen citizen={citizen} material={material} rewardType={rewardType} wallet={wallet} cash={finalCash} points={finalPoints} weight={actualWeight} center={selectedCenterData} transactionId={transactionId} egovPayTxnData={egovPayTxnData} onRestart={restart} onUpdateMobile={updateCitizenMobile} />}
         {step === "heatmap" && (
           <section className="heatmap-page">
             <span className="overline">Spatial Waste Intelligence</span>
@@ -1178,15 +1190,16 @@ function PointsScreen({ points, onContinue }: { points: number; onContinue: () =
   );
 }
 
-function CompleteScreen({ citizen, material, rewardType, wallet, cash, points, weight, center, transactionId, egovPayTxnData, onRestart }: { citizen: CitizenProfile | null; material: MaterialResult; rewardType: RewardType; wallet: Wallet; cash: number; points: number; weight: number; center: Center; transactionId: string; egovPayTxnData?: Record<string, unknown> | null; onRestart: () => void }) {
+function CompleteScreen({ citizen, material, rewardType, wallet, cash, points, weight, center, transactionId, egovPayTxnData, onRestart, onUpdateMobile }: { citizen: CitizenProfile | null; material: MaterialResult; rewardType: RewardType; wallet: Wallet; cash: number; points: number; weight: number; center: Center; transactionId: string; egovPayTxnData?: Record<string, unknown> | null; onRestart: () => void; onUpdateMobile: (value: string) => void }) {
   const [messageState, setMessageState] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [messageText, setMessageText] = useState("");
-  const mobile = normalizePhMobile(String(citizen?.mobile_number || citizen?.mobile || ""));
+  const [smsMobile, setSmsMobile] = useState(normalizePhMobile(String(citizen?.mobile_number || citizen?.mobile || "")));
 
   async function sendConfirmation() {
+    const mobile = normalizePhMobile(smsMobile);
     if (!mobile) {
       setMessageState("error");
-      setMessageText("Add a valid Philippine mobile number to the citizen profile before sending an SMS.");
+      setMessageText("Add a valid Philippine mobile number before sending an SMS.");
       return;
     }
     setMessageState("sending");
@@ -1200,6 +1213,7 @@ function CompleteScreen({ citizen, material, rewardType, wallet, cash, points, w
       });
       const payload = (await response.json()) as { message?: string; error?: string };
       if (!response.ok) throw new Error(payload.error || "The confirmation SMS could not be sent.");
+      if (mobile !== normalizePhMobile(String(citizen?.mobile_number || citizen?.mobile || ""))) onUpdateMobile(mobile);
       setMessageState("sent");
       setMessageText(payload.message || "Confirmation SMS sent through e-Message.");
     } catch (error) {
@@ -1219,7 +1233,11 @@ function CompleteScreen({ citizen, material, rewardType, wallet, cash, points, w
       <div className="receipt"><div className="receipt-head"><span>EKALAKAL RECEIPT</span><strong>{transactionId}</strong></div><ReceiptLine label="Material" value={material.name} /><ReceiptLine label="Validated weight" value={`${weight.toFixed(1)} kg`} /><ReceiptLine label="Collection center" value={center.name} /><ReceiptLine label="Reward" value={rewardType === "cash" ? `${formatMoney(cash)} · ${wallet}` : `${points} Green Points`} />{egovPayTxnData?.refno ? <ReceiptLine label="eGovPay Ref No." value={egovPayTxnData.refno as string} /> : null}{egovPayTxnData?.payment_status ? <ReceiptLine label="Payment status" value={egovPayTxnData.payment_status as string} /> : null}<ReceiptLine label="Status" value="Completed" /></div>
 
       <div className="message-panel">
-        <div><span className="overline">e-Message</span><h3>Send transaction confirmation</h3><p>{mobile ? `The SMS will be sent to ${mobile}.` : "No valid mobile number is available in the citizen profile."}</p></div>
+        <div><span className="overline">e-Message</span><h3>Send transaction confirmation</h3><p>{smsMobile ? `The SMS will be sent to ${smsMobile}.` : "No valid mobile number is available in the citizen profile."}</p></div>
+        <div className="sms-mobile-field">
+          <label className="field light-field"><span>Replacement mobile number</span><div className="field-control"><input value={smsMobile} onChange={(event) => { setSmsMobile(event.target.value); setMessageText(""); setMessageState("idle"); }} placeholder="09XX XXX XXXX" /></div></label>
+          <small>National ID number not usable? Update the number the confirmation goes to.</small>
+        </div>
         <button className="secondary-action" disabled={messageState === "sending" || messageState === "sent"} onClick={() => void sendConfirmation()}>{messageState === "sending" ? "Sending…" : messageState === "sent" ? "Confirmation sent" : "Send SMS"}</button>
       </div>
       {messageText && <div className={messageState === "error" ? "provider-error" : "provider-success"}>{messageText}</div>}
@@ -1817,7 +1835,11 @@ function ReceiptLine({ label, value }: { label: string; value: string }) {
   return <div className="receipt-line"><span>{label}</span><strong>{value}</strong></div>;
 }
 
-function DashboardScreen({ onBack, citizen, displayName, initials, onLogout }: { onBack: () => void; citizen: CitizenProfile | null; displayName: string; initials: string; onLogout: () => void }) {
+function DashboardScreen({ onBack, citizen, displayName, initials, onLogout, onUpdateMobile }: { onBack: () => void; citizen: CitizenProfile | null; displayName: string; initials: string; onLogout: () => void; onUpdateMobile: (value: string) => void }) {
+  const [mobileEditOpen, setMobileEditOpen] = useState(false);
+  const [mobileDraft, setMobileDraft] = useState(String(citizen?.mobile_number || citizen?.mobile || ""));
+  const [mobileError, setMobileError] = useState("");
+  const profileMobile = String(citizen?.mobile_number || citizen?.mobile || "");
   const totalBalance = 1250.00;
   const totalPoints = 1420;
   const conversionRate = 0.88;
@@ -1888,6 +1910,30 @@ function DashboardScreen({ onBack, citizen, displayName, initials, onLogout }: {
             <small>{citizen?.email || "Verified citizen"}</small>
             <button className="account-card-signout" onClick={onLogout}>Sign out <Icon name="logout" /></button>
           </div>
+        </div>
+
+        <div className="account-mobile">
+          <div className="account-mobile-head">
+            <small>Mobile number</small>
+            {!mobileEditOpen && <button className="account-mobile-update" onClick={() => { setMobileDraft(profileMobile); setMobileError(""); setMobileEditOpen(true); }}>Update</button>}
+          </div>
+          {mobileEditOpen ? (
+            <div className="account-mobile-edit">
+              <label className="field light-field"><span>Replacement mobile number</span><div className="field-control"><input value={mobileDraft} onChange={(event) => { setMobileDraft(event.target.value); setMobileError(""); }} placeholder="09XX XXX XXXX" /></div></label>
+              {mobileError && <p className="account-mobile-error">{mobileError}</p>}
+              <div className="account-mobile-actions">
+                <button className="secondary-action" onClick={() => { setMobileEditOpen(false); setMobileError(""); }}>Cancel</button>
+                <button className="primary-action" onClick={() => {
+                  if (!normalizePhMobile(mobileDraft)) { setMobileError("Enter a valid Philippine mobile number, e.g. 0917 000 0000."); return; }
+                  onUpdateMobile(mobileDraft);
+                  setMobileEditOpen(false);
+                  setMobileError("");
+                }}>Save number</button>
+              </div>
+            </div>
+          ) : (
+            <strong className="account-mobile-value">{profileMobile || "Not set"}</strong>
+          )}
         </div>
       </div>
 

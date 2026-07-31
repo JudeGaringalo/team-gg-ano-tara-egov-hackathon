@@ -4317,6 +4317,97 @@ select {
   color: #fff;
 }
 
+.account-mobile {
+  margin-top: 14px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fff;
+}
+
+.account-mobile-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.account-mobile-head small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.account-mobile-value {
+  display: block;
+  margin-top: 8px;
+  font-size: 14px;
+}
+
+.account-mobile-update {
+  border: 0;
+  background: transparent;
+  color: var(--green);
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+  padding: 0;
+}
+
+.account-mobile-update:hover {
+  text-decoration: underline;
+}
+
+.account-mobile-edit .field {
+  margin-top: 12px;
+}
+
+.account-mobile-edit .field-control {
+  min-height: 46px;
+}
+
+.account-mobile-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.account-mobile-actions .primary-action,
+.account-mobile-actions .secondary-action {
+  min-height: 38px;
+  padding: 0 16px;
+  font-size: 12px;
+}
+
+.account-mobile-error {
+  margin: 8px 0 0;
+  color: var(--danger);
+  font-size: 11px;
+}
+
+.sms-mobile-field {
+  width: min(300px, 100%);
+  flex: 1 1 auto;
+}
+
+.sms-mobile-field .field {
+  margin-top: 0;
+}
+
+.sms-mobile-field .field-control {
+  min-height: 44px;
+}
+
+.sms-mobile-field small {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
 @media (max-width: 680px) {
   .dashboard-hero {
     flex-direction: column;
