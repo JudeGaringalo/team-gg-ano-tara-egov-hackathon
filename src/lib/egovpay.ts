@@ -11,7 +11,7 @@ export type EGovPayTransaction = {
 type TransactionResponse = { data?: EGovPayTransaction; message?: string; error?: string; errors?: unknown; error_description?: string };
 
 function config() {
-  const baseUrl = normalizeBaseUrl(process.env.EGOV_PAY_BASE_URL, "https://egovpay-pgi-dev.oueg.info");
+  const baseUrl = normalizeBaseUrl(process.env.EGOV_PAY_BASE_URL, "https://platforms-api.e.gov.ph/egovpay");
   const apiKey = process.env.EGOV_PAY_API_KEY;
   const settlementTemplateUuid = process.env.EGOV_PAY_SETTLEMENT_TEMPLATE_UUID;
   if (!apiKey || !settlementTemplateUuid) throw new Error("eGovPay credentials are missing.");
