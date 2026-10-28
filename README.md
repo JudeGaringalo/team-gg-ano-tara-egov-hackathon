@@ -1,5 +1,5 @@
 
-# eKalakal — Turn Waste Into Value
+The original README line appears here.
 
 **A recycling-rewards prototype by Team GG for the eGov Hackathon.**
 
